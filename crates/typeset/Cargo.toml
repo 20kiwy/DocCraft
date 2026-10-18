@@ -1,0 +1,10 @@
+[package]
+name = "doccraft-typeset"
+version.workspace = true
+edition.workspace = true
+description = "Native typesetting craft for DocCraft: markup source, page layout engine and a live paginated preview with PDF export."
+
+[dependencies]
+egui.workspace = true
+serde_json.workspace = true
+craft-ui.workspace = true

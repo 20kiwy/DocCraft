@@ -1,0 +1,18 @@
+[submodule "upstream/craft-libs"]
+	path = upstream/craft-libs
+	url = https://github.com/storytold/craft-libs
+[submodule "upstream/wordcraft"]
+	path = upstream/wordcraft
+	url = https://github.com/storytold/wordcraft
+[submodule "upstream/pdfcraft"]
+	path = upstream/pdfcraft
+	url = https://github.com/storytold/pdfcraft
+[submodule "upstream/gridcraft"]
+	path = upstream/gridcraft
+	url = https://github.com/storytold/gridcraft
+[submodule "upstream/deckcraft"]
+	path = upstream/deckcraft
+	url = https://github.com/storytold/deckcraft
+[submodule "upstream/figcraft"]
+	path = upstream/figcraft
+	url = https://github.com/storytold/figcraft

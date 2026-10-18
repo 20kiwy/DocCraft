@@ -1,0 +1,10 @@
+[package]
+name = "doccraft-md"
+version.workspace = true
+edition.workspace = true
+description = "Native Markdown craft for DocCraft: CommonMark-subset parser, live split preview editor with a writing toolbar."
+
+[dependencies]
+egui.workspace = true
+serde_json.workspace = true
+craft-ui.workspace = true

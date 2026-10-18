@@ -1,0 +1,32 @@
+[package]
+name = "doccraft"
+version.workspace = true
+edition.workspace = true
+description = "DocCraft 3.0 — one binary hosting the four real storytold crafts (WordCraft, GridCraft, DeckCraft, PdfCraft) plus the native Draw (drawio), Markdown and Typeset crafts."
+
+[[bin]]
+name = "doccraft"
+path = "src/main.rs"
+
+[dependencies]
+egui.workspace = true
+eframe.workspace = true
+serde_json.workspace = true
+log = "0.4"
+
+# real crafts
+craft-ui.workspace = true
+wordcraft-ui-egui.workspace = true
+wordcraft-engine.workspace = true
+gridcraft-ui-egui.workspace = true
+gridcraft-engine.workspace = true
+deckcraft-ui-egui.workspace = true
+deckcraft-engine.workspace = true
+pdfcraft-ui-egui.workspace = true
+figcraft-ui-egui.workspace = true
+figcraft-engine.workspace = true
+
+# new native crafts
+doccraft-drawio.workspace = true
+doccraft-md.workspace = true
+doccraft-typeset.workspace = true

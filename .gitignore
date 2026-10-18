@@ -1,0 +1,6 @@
+target/
+**/target/
+keep/
+*.zip
+node_modules/
+shots/*.xwd
