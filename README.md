@@ -5,8 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#licenses)
 
 **One binary hosting the FIVE real storytold crafts — WordCraft, GridCraft,
-DeckCraft, PdfCraft and FigCraft — plus five new native crafts: Draw (drawio),
-Vector, Markdown, Typeset and Notes.** The upstream apps are linked **unchanged**
+DeckCraft, PdfCraft and FigCraft — plus four new native crafts: Draw (drawio),
+Markdown, Typeset and Notes.** The upstream apps are linked **unchanged**
 from git submodules under [`upstream/`](upstream) and render their own complete,
 real UIs (their chrome, ribbons, toolbars, panels and status bars —
 pixel-for-pixel theirs). The shell (launcher, hub strip, About, window header)
@@ -14,9 +14,9 @@ is themed after storytold's own **craft-launcher**.
 
 | ![Launcher](screenshots/00-launcher.png) |
 |:---:|
-| **DocCraft launcher** — all ten crafts, craft-launcher theme, per-craft status |
+| **DocCraft launcher** — all nine crafts, craft-launcher theme, per-craft status |
 
-## The ten crafts
+## The nine crafts
 
 | # | Craft | Opens | Source | Version | Honest readiness |
 |---|-------|-------|--------|---------|------------------|
@@ -25,11 +25,10 @@ is themed after storytold's own **craft-launcher**.
 | 3 | **Slides** (DeckCraft) | `.pptx …` | [storytold/deckcraft](https://github.com/storytold/deckcraft) | 0.8.0 | breadth 84% — ready ~55% |
 | 4 | **Reader** (PdfCraft) | `.pdf` | [storytold/pdfcraft](https://github.com/storytold/pdfcraft) | 0.9.0 | ready ~50% |
 | 5 | **Design** (FigCraft) | `.fig .figcraft .svg` | [storytold/figcraft](https://github.com/storytold/figcraft) | 0.7.0 | menus **100%** — ready ~53% |
-| 6 | **Draw** (drawio-style) | `.drawio .xml` | `crates/drawio` (this repo) | 3.2.0 | native — mxGraph XML round-trip, green connection dots, edge start/end editing, full export |
-| 7 | **Vector** (Illustrator-style) | `.vec .svg` | `crates/vector` (this repo) | 3.2.0 | native — 16-tool toolbox, bezier pen, layers |
-| 8 | **Markdown** | `.md .markdown` | `crates/md` (this repo) | 3.2.0 | native — split live preview |
-| 9 | **Typeset** | `.typ .tex` | `crates/typeset` (this repo) | 3.2.0 | native — justified pagination → PDF |
-| 10 | **Notes** | `.note .notes` | `crates/notes` (this repo) | 3.2.0 | native — multi-page notebook |
+| 6 | **Draw** (drawio-style) | `.drawio .xml` | `crates/drawio` (this repo) | 3.3.0 | native — mxGraph XML round-trip, drawio-exact hover arrows / green connection dots / edge start-end editing, full export |
+| 7 | **Markdown** | `.md .markdown` | `crates/md` (this repo) | 3.3.0 | native — split live preview |
+| 8 | **Typeset** | `.typ .tex` | `crates/typeset` (this repo) | 3.3.0 | native — justified pagination → PDF |
+| 9 | **Notes** | `.note .notes` | `crates/notes` (this repo) | 3.3.0 | native — multi-page notebook |
 
 Readiness numbers come from each upstream repo's own `ROADMAP.md` — see
 [`CRAFT-STATUS.md`](CRAFT-STATUS.md) for the full honest table.
@@ -43,14 +42,18 @@ Readiness numbers come from each upstream repo's own `ROADMAP.md` — see
 | ![Slides](screenshots/03-deckcraft.png) | ![Reader](screenshots/04-pdfcraft.png) |
 | **Design** (real FigCraft) | **Draw** (native drawio editor) |
 | ![Design](screenshots/05-figcraft.png) | ![Draw](screenshots/06-draw.png) |
-| **Vector** | **Markdown** |
-| ![Vector](screenshots/07-vector.png) | ![Markdown](screenshots/08-markdown.png) |
-| **Typeset** | **Notes** |
-| ![Typeset](screenshots/09-typeset.png) | ![Notes](screenshots/10-notes.png) |
-| **About DocCraft** | **drawio green connection dots** |
-| ![About](screenshots/11-about.png) | ![Hover](screenshots/12-draw-hover.png) |
-| **Edge mid-drag** (× fixed points + green snap ring + target highlight) | **Edge linked** (start/end editable in Style panel) |
-| ![Drag](screenshots/13-draw-drag.png) | ![Linked](screenshots/14-draw-linked.png) |
+| **Markdown** | **Typeset** |
+| ![Markdown](screenshots/08-markdown.png) | ![Typeset](screenshots/09-typeset.png) |
+| **Notes** | **About DocCraft** |
+| ![Notes](screenshots/10-notes.png) | ![About](screenshots/11-about.png) |
+| **drawio green connection dots** | **Edge mid-drag** (× fixed points + green snap ring + target highlight) |
+| ![Hover](screenshots/12-draw-hover.png) | ![Drag](screenshots/13-draw-drag.png) |
+| **Edge linked** (start/end editable in Style panel) | **drawio hover arrows** (exact #29b6f2 SVG + placement) |
+| ![Linked](screenshots/14-draw-linked.png) | ![Arrows](screenshots/15-draw-arrows.png) |
+| **Connect mid-drag** (dashed-green preview + × points + [100%, 50%] hint) | **Connected at fixed point** |
+| ![MidDrag](screenshots/16-draw-connect-middrag.png) | ![Connected](screenshots/17-draw-connected.png) |
+| **Endpoint re-link mid-drag** (drawio edge-handler hint) | **Re-linked** (start/end changed like drawio) |
+| ![RelinkMid](screenshots/18-draw-relink-middrag.png) | ![Relinked](screenshots/19-draw-relinked.png) |
 
 ## Why this is "same same"
 
@@ -120,14 +123,14 @@ doccraft [--sample] [files…] [--register-associations (Windows)]
 
 Files route by extension: `.docx .doc .odt` → Writer · `.xlsx .csv …` →
 Sheets · `.pptx` → Slides · `.pdf` → Reader · `.fig .figcraft .svg` → Design ·
-`.drawio .xml` → Draw · `.vec .svg` → Vector · `.md` → Markdown ·
+`.drawio .xml` → Draw · `.md` → Markdown ·
 `.typ .tex` → Typeset · `.note .notes` → Notes.
 
 ### Windows file associations
 
 `windows/install.bat` (or `install.ps1`) copies DocCraft to
-`%LOCALAPPDATA%\DocCraft`, registers **27 extensions** (docx doc odt rtf
-xlsx xlsm xls ods csv tsv pptx potx ppsx pdf fig figcraft svg drawio xml vec
+`%LOCALAPPDATA%\DocCraft`, registers **26 extensions** (docx doc odt rtf
+xlsx xlsm xls ods csv tsv pptx potx ppsx pdf fig figcraft svg drawio xml
 md markdown typ tex ts note notes) under `HKCU\Software\Classes` with icons
 and a Start-Menu shortcut — no admin required. `uninstall.bat` removes
 everything. From inside the app: **About → Register file associations**.
@@ -140,7 +143,6 @@ DocCraft/
 │                           craft-launcher theme, register-associations
 ├── crates/
 │   ├── drawio/             native drawio craft (mxGraph model + XML + connections + export)
-│   ├── vector/             native Illustrator-style craft
 │   ├── md/                 native Markdown craft (parser + live split preview)
 │   ├── typeset/            native typesetting craft (layout engine + PDF export)
 │   └── notes/              native notebook craft
@@ -150,7 +152,8 @@ DocCraft/
 │   ├── gridcraft/          Excel                     (v0.8.0-4, c30fa3f)
 │   ├── deckcraft/          PPT                       (v0.8.0, 22db926)
 │   ├── pdfcraft/           Acrobat                   (v0.9.0-38, a12fe8f)
-│   └── figcraft/           Figma-style Design        (v0.7.0-104, d8ff144)
+│   ├── figcraft/           Figma-style Design        (v0.7.0-104, d8ff144)
+│   └── drawio/             jgraph/drawio JS          (v32.5.5, 17b367b) — reference spec
 ├── screenshots/            all craft screenshots (below)
 ├── windows/                install.bat / install.ps1 / uninstall.bat
 ├── scripts/update-crafts.sh   pull every upstream repo to latest + re-pin

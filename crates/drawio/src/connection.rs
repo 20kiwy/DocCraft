@@ -614,10 +614,12 @@ pub struct Snap {
 pub enum ConnectState {
     #[default]
     Idle,
-    /// Dragging a new connection out of a shape's hover arrow.
-    Connecting { source: String, side: Option<(f32, f32)>, cur: Pos2, snapped: Option<Snap> },
+    /// Dragging a new connection out of a shape's hover arrow. `press` is the
+    /// world position of the initial press (click-vs-drag is resolved on
+    /// release: no movement = drawio's "click an arrow → new connected node").
+    Connecting { source: String, side: Option<(f32, f32)>, cur: Pos2, snapped: Option<Snap>, press: Pos2 },
     /// Dragging an existing edge endpoint to re-link or dangle it.
-    EndpointDrag { edge: String, is_source: bool, cur: Pos2, snapped: Option<Snap> },
+    EndpointDrag { edge: String, is_source: bool, cur: Pos2, snapped: Option<Snap>, press: Pos2 },
 }
 
 impl ConnectState {

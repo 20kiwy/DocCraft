@@ -3,7 +3,7 @@
 //! WordCraft (Word), GridCraft (Excel), DeckCraft (PowerPoint), PdfCraft
 //! (Acrobat) and FigCraft (Design) are the upstream apps from
 //! github.com/storytold, linked as path dependencies from git submodules and
-//! embedded in this shell, unchanged. Draw (drawio), Vector, Markdown,
+//! embedded in this shell, unchanged. Draw (drawio), Markdown,
 //! Typeset and Notes are DocCraft's own native crafts, written in the same
 //! pattern (model + engine + egui front end).
 //!

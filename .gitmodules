@@ -16,3 +16,7 @@
 [submodule "upstream/figcraft"]
 	path = upstream/figcraft
 	url = https://github.com/storytold/figcraft
+[submodule "upstream/drawio"]
+	path = upstream/drawio
+	url = https://github.com/jgraph/drawio
+	update = none
