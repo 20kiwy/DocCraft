@@ -1,0 +1,152 @@
+name: Build & Release
+
+# Build DocCraft for ALL platforms on every push and every v* tag.
+# A v* tag additionally publishes a GitHub Release with the per-version
+# binaries attached (doccraft-<version>-<platform>.zip + SHA256SUMS).
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    timeout-minutes: 300
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            exe: doccraft
+          - name: windows-x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            exe: doccraft.exe
+          - name: macos-x64
+            os: macos-13
+            target: x86_64-apple-darwin
+            exe: doccraft
+          - name: macos-arm64
+            os: macos-14
+            target: aarch64-apple-darwin
+            exe: doccraft
+
+    steps:
+      - name: Checkout (with all upstream craft submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.name }}
+
+      - name: Apply DocCraft system overrides to upstream crafts
+        shell: bash
+        run: bash scripts/apply-overrides.sh
+
+      - name: Install Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
+            libx11-dev libxcursor-dev libxrandr-dev libxi-dev \
+            libegl1-mesa-dev libgl1-mesa-dev cmake
+
+      - name: Install NASM (needed by aws-lc-sys on Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          choco install nasm -y --no-progress
+          echo "C:\\Program Files\\NASM" >> "$GITHUB_PATH"
+
+      - name: Build (fast profile)
+        shell: bash
+        env:
+          LIBCLANG_PATH: ${{ runner.os == 'Windows' && 'C:\\Program Files\\LLVM\\bin' || '' }}
+        run: cargo build --profile fast
+
+      - name: Package (Linux / macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          NAME="doccraft-${VERSION}-${{ matrix.name }}"
+          mkdir -p "dist/$NAME"
+          cp "target/fast/${{ matrix.exe }}" "dist/$NAME/"
+          cp README.md CRAFT-STATUS.md "dist/$NAME/"
+          chmod +x "dist/$NAME/doccraft"
+          cd dist && zip -r "$NAME.zip" "$NAME"
+          cd .. && mv "dist/$NAME.zip" ./ && echo "PACKAGED=$NAME.zip" >> "$GITHUB_ENV"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = "$env:GITHUB_REF_NAME" -replace '^v',''
+          $name = "doccraft-$version-windows-x64"
+          New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
+          Copy-Item target/fast/doccraft.exe "dist/$name/"
+          Copy-Item -Recurse -Force windows "dist/$name/windows"
+          Copy-Item README.md "dist/$name/"
+          Copy-Item CRAFT-STATUS.md "dist/$name/"
+          Compress-Archive -Path "dist/$name" -DestinationPath "$name.zip"
+          "PACKAGED=$name.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ env.PACKAGED }}
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish release (binaries per version)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: dist
+
+      - name: Checksums
+        shell: bash
+        run: |
+          cd dist
+          sha256sum *.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release with binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS.txt
+          generate_release_notes: true
+          fail_on_unmatched_files: true

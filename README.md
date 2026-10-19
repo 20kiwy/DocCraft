@@ -1,71 +1,163 @@
-# DocCraft 3.1 — the real crafts, one suite
+# DocCraft — the real crafts, one suite
+
+[![Build & Release](https://github.com/20kiwy/DocCraft/actions/workflows/build.yml/badge.svg)](https://github.com/20kiwy/DocCraft/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/20kiwy/DocCraft?include_prereleases)](https://github.com/20kiwy/DocCraft/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#licenses)
 
 **One binary hosting the FIVE real storytold crafts — WordCraft, GridCraft,
-DeckCraft, PdfCraft and FigCraft — plus three new native crafts: Draw (drawio),
-Markdown and Typeset.** The upstream apps are linked **unchanged** from git submodules
-under [`upstream/`](upstream) and render their own complete, real UIs (their
-chrome, ribbons, toolbars, panels and status bars — pixel-for-pixel theirs).
+DeckCraft, PdfCraft and FigCraft — plus five new native crafts: Draw (drawio),
+Vector, Markdown, Typeset and Notes.** The upstream apps are linked **unchanged**
+from git submodules under [`upstream/`](upstream) and render their own complete,
+real UIs (their chrome, ribbons, toolbars, panels and status bars —
+pixel-for-pixel theirs). The shell (launcher, hub strip, About, window header)
+is themed after storytold's own **craft-launcher**.
+
+| ![Launcher](screenshots/00-launcher.png) |
+|:---:|
+| **DocCraft launcher** — all ten crafts, craft-launcher theme, per-craft status |
+
+## The ten crafts
+
+| # | Craft | Opens | Source | Version | Honest readiness |
+|---|-------|-------|--------|---------|------------------|
+| 1 | **Writer** (WordCraft) | `.docx .doc .odt .rtf` | [storytold/wordcraft](https://github.com/storytold/wordcraft) | 0.8.0 | ~60% — ribbon catalog **97%** |
+| 2 | **Sheets** (GridCraft) | `.xlsx .xls .csv …` | [storytold/gridcraft](https://github.com/storytold/gridcraft) | 0.8.0 | breadth ~75% — functions **98.1%** |
+| 3 | **Slides** (DeckCraft) | `.pptx …` | [storytold/deckcraft](https://github.com/storytold/deckcraft) | 0.8.0 | breadth 84% — ready ~55% |
+| 4 | **Reader** (PdfCraft) | `.pdf` | [storytold/pdfcraft](https://github.com/storytold/pdfcraft) | 0.9.0 | ready ~50% |
+| 5 | **Design** (FigCraft) | `.fig .figcraft .svg` | [storytold/figcraft](https://github.com/storytold/figcraft) | 0.7.0 | menus **100%** — ready ~53% |
+| 6 | **Draw** (drawio-style) | `.drawio .xml` | `crates/drawio` (this repo) | 3.2.0 | native — mxGraph XML round-trip, green connection dots, edge start/end editing, full export |
+| 7 | **Vector** (Illustrator-style) | `.vec .svg` | `crates/vector` (this repo) | 3.2.0 | native — 16-tool toolbox, bezier pen, layers |
+| 8 | **Markdown** | `.md .markdown` | `crates/md` (this repo) | 3.2.0 | native — split live preview |
+| 9 | **Typeset** | `.typ .tex` | `crates/typeset` (this repo) | 3.2.0 | native — justified pagination → PDF |
+| 10 | **Notes** | `.note .notes` | `crates/notes` (this repo) | 3.2.0 | native — multi-page notebook |
+
+Readiness numbers come from each upstream repo's own `ROADMAP.md` — see
+[`CRAFT-STATUS.md`](CRAFT-STATUS.md) for the full honest table.
+
+## Screenshots
+
+| Writer (real WordCraft) | Sheets (real GridCraft) |
+|:---:|:---:|
+| ![Writer](screenshots/01-wordcraft.png) | ![Sheets](screenshots/02-gridcraft.png) |
+| **Slides** (real DeckCraft) | **Reader** (real PdfCraft) |
+| ![Slides](screenshots/03-deckcraft.png) | ![Reader](screenshots/04-pdfcraft.png) |
+| **Design** (real FigCraft) | **Draw** (native drawio editor) |
+| ![Design](screenshots/05-figcraft.png) | ![Draw](screenshots/06-draw.png) |
+| **Vector** | **Markdown** |
+| ![Vector](screenshots/07-vector.png) | ![Markdown](screenshots/08-markdown.png) |
+| **Typeset** | **Notes** |
+| ![Typeset](screenshots/09-typeset.png) | ![Notes](screenshots/10-notes.png) |
+| **About DocCraft** | **drawio green connection dots** |
+| ![About](screenshots/11-about.png) | ![Hover](screenshots/12-draw-hover.png) |
+| **Edge mid-drag** (× fixed points + green snap ring + target highlight) | **Edge linked** (start/end editable in Style panel) |
+| ![Drag](screenshots/13-draw-drag.png) | ![Linked](screenshots/14-draw-linked.png) |
 
 ## Why this is "same same"
 
 - The UI you get is **the upstream UI code itself** (`crates/ui-egui` of each
   repo — WordCraft's alone is 54k lines across ~60 modules), not a re-creation.
 - All crafts share storytold's own UI foundation
-  [`craft-ui`](https://github.com/storytold/craft-libs) (buttons, docking,
-  icons, tabs, theme) — patched to one local checkout so the suite links a
-  single copy.
+  [`craft-ui`](https://github.com/storytold/craft-libs) — patched to one local
+  checkout so the suite links a single copy.
 - Each craft keeps its own engine, model and file readers; opening a `.docx`
   runs WordCraft's real `file.open` command, a `.pptx` runs DeckCraft's, etc.
+- The drawio craft implements the **jgraph/drawio v32.5.5** connection spec
+  natively in Rust (hover arrows, × fixed points, green snap ring, edge
+  start/end re-binding, 32-entry arrow marker list, SVG/PNG/PDF export) —
+  the extracted spec lives in [`DRAWIO-SPEC.md`](DRAWIO-SPEC.md).
 
-## Layout
+## Download (per-version release binaries)
 
-```
-doccraft-suite/
-├── app/                    the DocCraft shell: launcher, hub strip, file routing
-├── crates/
-│   ├── drawio/             native drawio craft (mxGraph model + XML + editor)
-│   ├── md/                 native Markdown craft (parser + live split preview)
-│   └── typeset/            native typesetting craft (layout engine + PDF export)
-├── upstream/               git submodules — the real repos, updatable
-│   ├── craft-libs/         shared craft-ui widgets
-│   ├── wordcraft/          v0.8.0   (Word)     ~60% ready, ribbon catalog 97%
-│   ├── gridcraft/          v0.8.0   (Excel)    breadth ~75%, functions 98.1%
-│   ├── deckcraft/          v0.8.0   (PPT)      breadth 84%, ready ~55%
-│   └── pdfcraft/           v0.9.0   (Acrobat)  ready ~50%
-├── scripts/update-crafts.sh   pull every upstream repo to latest + re-pin
-├── CRAFT-STATUS.md         versions + honest readiness per repo (from their ROADMAPs)
-└── PROGRESS.md             what was built and how it links
-```
+Every `v*` tag triggers CI that builds **all four platform binaries** and
+attaches them to a GitHub Release automatically:
+
+| Artifact | Platform |
+|---|---|
+| `doccraft-<version>-linux-x64.zip` | Linux x86_64 (glibc 2.35+) |
+| `doccraft-<version>-windows-x64.zip` | Windows x86_64 (+ `install.bat` / `install.ps1` — registers 27 file associations, no admin needed) |
+| `doccraft-<version>-macos-x64.zip` | macOS Intel |
+| `doccraft-<version>-macos-arm64.zip` | macOS Apple Silicon |
+
+→ **[Latest release](https://github.com/20kiwy/DocCraft/releases/latest)**
+
+macOS note: the binaries are unsigned — right-click → Open the first time, or
+`xattr -d com.apple.quarantine doccraft`.
 
 ## Build & run
 
 ```bash
+git clone --recurse-submodules https://github.com/20kiwy/DocCraft
 cargo build --profile fast      # 2-core-friendly profile (opt 1, no LTO)
 ./target/fast/doccraft          # launcher opens; pick a craft
 ./target/fast/doccraft report.docx plan.drawio notes.md   # open straight into a craft
 ```
 
+Windows: `cargo build --profile fast` on MSVC needs NASM (`choco install nasm`)
+for `aws-lc-sys`. Or just use the CI-built release zip.
+
+Linux build/run deps: `libxkbcommon-dev libwayland-dev` (dlopened at runtime;
+software GL works fine — `WGPU_BACKEND=gl`).
+
 ## Updating the upstream crafts
 
 ```bash
-scripts/update-crafts.sh              # all five repos → latest main
+scripts/update-crafts.sh              # all six repos → latest main
 scripts/update-crafts.sh wordcraft    # just one
 cargo build --profile fast            # rebuild the suite against the new pins
 ```
 
 Each `upstream/<repo>` is a normal git submodule: `git submodule status`
 prints the pinned SHA, `git -C upstream/wordcraft checkout vX.Y.Z` pins a
-release, and `git add upstream/wordcraft` records it.
+release, and `git add upstream/wordcraft` records it. `scripts/apply-overrides.sh`
+re-applies the DocCraft system edits (single About, Website link) after any
+update — idempotent.
 
 ## Command line
 
 ```
-doccraft [--sample] [files…]
+doccraft [--sample] [files…] [--register-associations (Windows)]
 ```
 
 Files route by extension: `.docx .doc .odt` → Writer · `.xlsx .csv …` →
-Sheets · `.pptx` → Slides · `.pdf` → Reader · `.drawio` → Draw · `.md` →
-Markdown · `.typ .tex` → Typeset.
+Sheets · `.pptx` → Slides · `.pdf` → Reader · `.fig .figcraft .svg` → Design ·
+`.drawio .xml` → Draw · `.vec .svg` → Vector · `.md` → Markdown ·
+`.typ .tex` → Typeset · `.note .notes` → Notes.
+
+### Windows file associations
+
+`windows/install.bat` (or `install.ps1`) copies DocCraft to
+`%LOCALAPPDATA%\DocCraft`, registers **27 extensions** (docx doc odt rtf
+xlsx xlsm xls ods csv tsv pptx potx ppsx pdf fig figcraft svg drawio xml vec
+md markdown typ tex ts note notes) under `HKCU\Software\Classes` with icons
+and a Start-Menu shortcut — no admin required. `uninstall.bat` removes
+everything. From inside the app: **About → Register file associations**.
+
+## Layout
+
+```
+DocCraft/
+├── app/                    the DocCraft shell: launcher, hub strip, file routing,
+│                           craft-launcher theme, register-associations
+├── crates/
+│   ├── drawio/             native drawio craft (mxGraph model + XML + connections + export)
+│   ├── vector/             native Illustrator-style craft
+│   ├── md/                 native Markdown craft (parser + live split preview)
+│   ├── typeset/            native typesetting craft (layout engine + PDF export)
+│   └── notes/              native notebook craft
+├── upstream/               git submodules — the real repos, updatable
+│   ├── craft-libs/         shared craft-ui widgets   (v0.1.0, 82a24b0)
+│   ├── wordcraft/          Word                      (v0.8.0, 4a251d4)
+│   ├── gridcraft/          Excel                     (v0.8.0-4, c30fa3f)
+│   ├── deckcraft/          PPT                       (v0.8.0, 22db926)
+│   ├── pdfcraft/           Acrobat                   (v0.9.0-38, a12fe8f)
+│   └── figcraft/           Figma-style Design        (v0.7.0-104, d8ff144)
+├── screenshots/            all craft screenshots (below)
+├── windows/                install.bat / install.ps1 / uninstall.bat
+├── scripts/update-crafts.sh   pull every upstream repo to latest + re-pin
+├── CRAFT-STATUS.md         versions + honest readiness per repo (from their ROADMAPs)
+├── DRAWIO-SPEC.md          drawio JS connection/arrow/export spec → native implementation
+└── PROGRESS.md             what was built and how it links
+```
 
 ## Licenses
 
