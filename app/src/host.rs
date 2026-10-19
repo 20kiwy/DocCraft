@@ -16,7 +16,7 @@ use deckcraft_ui_egui as deck_ui;
 use pdfcraft_ui_egui as pdf_ui;
 use figcraft_ui_egui as fig_ui;
 
-use crate::crafts::{DrawCraft, MdCraft, NotesCraft, TypesetCraft, VectorCraft};
+use crate::crafts::{DrawCraft, MdCraft, NotesCraft, TypesetCraft};
 
 // ── ArtCraft design tokens (from craft-launcher crates/ui-egui/src/theme.rs) ─
 pub mod theme {
@@ -66,21 +66,19 @@ pub enum Craft {
     Pdf,
     Fig,
     Draw,
-    Vector,
     Markdown,
     Typeset,
     Notes,
 }
 
 impl Craft {
-    pub const ALL: [Craft; 10] = [
+    pub const ALL: [Craft; 9] = [
         Craft::Word,
         Craft::Grid,
         Craft::Deck,
         Craft::Pdf,
         Craft::Fig,
         Craft::Draw,
-        Craft::Vector,
         Craft::Markdown,
         Craft::Typeset,
         Craft::Notes,
@@ -95,7 +93,6 @@ impl Craft {
             Craft::Pdf => "Reader — PdfCraft",
             Craft::Fig => "Design — FigCraft",
             Craft::Draw => "Draw — drawio",
-            Craft::Vector => "Vector — Illustrator",
             Craft::Markdown => "Markdown",
             Craft::Typeset => "Typeset",
             Craft::Notes => "Notes",
@@ -111,7 +108,6 @@ impl Craft {
             Craft::Pdf => "Reader",
             Craft::Fig => "Design",
             Craft::Draw => "Draw",
-            Craft::Vector => "Vector",
             Craft::Markdown => "Markdown",
             Craft::Typeset => "Typeset",
             Craft::Notes => "Notes",
@@ -126,7 +122,6 @@ impl Craft {
             Craft::Pdf => "v0.9.0",
             Craft::Fig => "v0.7.0",
             Craft::Draw => "3.2.0",
-            Craft::Vector => "3.2.0",
             Craft::Markdown => "3.1.0",
             Craft::Typeset => "3.1.0",
             Craft::Notes => "3.2.0",
@@ -154,7 +149,6 @@ impl Craft {
             Craft::Pdf => "alpha · ready ~50%",
             Craft::Fig => "alpha · menu 100% · breadth ~85% · ready ~53%",
             Craft::Draw => "native · drawio connections + full export",
-            Craft::Vector => "native · Illustrator-style editor",
             Craft::Markdown => "native · CommonMark subset + settings",
             Craft::Typeset => "native · page layout engine + PDF",
             Craft::Notes => "native · notebook + preview",
@@ -171,7 +165,6 @@ impl Craft {
             Craft::Pdf => theme::hex(0x12A58A),    // PdfCraft
             Craft::Fig => theme::hex(0x02DA96),    // FigCraft
             Craft::Draw => theme::hex(0xF08724),   // drawio orange
-            Craft::Vector => theme::hex(0xE8573F), // VectorCraft red
             Craft::Markdown => theme::hex(0x4D6DFE),
             Craft::Typeset => theme::hex(0x7A4FA8),
             Craft::Notes => theme::hex(0xE8A13D),
@@ -187,7 +180,6 @@ impl Craft {
             Craft::Pdf => "PDF · .pdf",
             Craft::Fig => "Figma-style · .fig .svg",
             Craft::Draw => "Diagrams · .drawio",
-            Craft::Vector => "Vector art · .svg .vec",
             Craft::Markdown => "Writing · .md",
             Craft::Typeset => "Typesetting · .typ .tex",
             Craft::Notes => "Notebook · notes",
@@ -205,7 +197,6 @@ pub struct HostApp {
     pub pdf: Option<pdf_ui::PdfCraftApp>,
     pub fig: Option<fig_ui::FigApp>,
     pub draw: DrawCraft,
-    pub vector: VectorCraft,
     pub md: MdCraft,
     pub typeset: TypesetCraft,
     pub notes: NotesCraft,
@@ -225,7 +216,6 @@ impl HostApp {
             pdf: None,
             fig: None,
             draw: DrawCraft::new(),
-            vector: VectorCraft::new(),
             md: MdCraft::new(),
             typeset: TypesetCraft::new(),
             notes: NotesCraft::new(),
@@ -303,7 +293,6 @@ impl HostApp {
             "pdf" => (Craft::Pdf, String::new()),
             "fig" | "figcraft" | "svg" => (Craft::Fig, String::new()),
             "drawio" | "xml" => (Craft::Draw, String::new()),
-            "vec" => (Craft::Vector, String::new()),
             "md" | "markdown" => (Craft::Markdown, String::new()),
             "typ" | "tex" | "ts" => (Craft::Typeset, String::new()),
             "note" | "notes" => (Craft::Notes, String::new()),
@@ -348,7 +337,6 @@ impl HostApp {
                 }
             }
             Craft::Draw => self.draw.open(&name, &bytes),
-            Craft::Vector => self.vector.open(&name, &bytes),
             Craft::Markdown => self.md.open(&name, &bytes),
             Craft::Typeset => self.typeset.open(&name, &bytes),
             Craft::Notes => self.notes.open(&name, &bytes),
@@ -441,7 +429,7 @@ impl eframe::App for HostApp {
                     f.logic(ctx);
                 }
             }
-            Craft::Launcher | Craft::Draw | Craft::Vector | Craft::Markdown | Craft::Typeset | Craft::Notes => {}
+            Craft::Launcher | Craft::Draw | Craft::Markdown | Craft::Typeset | Craft::Notes => {}
         }
     }
 
@@ -487,7 +475,7 @@ impl eframe::App for HostApp {
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.style_mut().spacing.item_spacing = vec2(14.0, 0.0);
-                        mono_label(ui, &format!("DOCRAFT SUITE v{} · TEN CRAFTS · UPSTORY EMBEDDED", env!("CARGO_PKG_VERSION")), theme::FAINT, 10.5);
+                        mono_label(ui, &format!("DOCRAFT SUITE v{} · NINE CRAFTS · UPSTREAM EMBEDDED", env!("CARGO_PKG_VERSION")), theme::FAINT, 10.5);
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if mono_link(ui, "GITHUB ↗") {
                                 ui.ctx().open_url(egui::OpenUrl::new_tab(theme::ORG_URL));
@@ -530,7 +518,6 @@ impl eframe::App for HostApp {
                     }
                 }
                 Craft::Draw => self.draw.ui(ui),
-                Craft::Vector => self.vector.ui(ui),
                 Craft::Markdown => self.md.ui(ui),
                 Craft::Typeset => self.typeset.ui(ui),
                 Craft::Notes => self.notes.ui(ui),
@@ -763,7 +750,6 @@ fn craft_blurb(c: Craft) -> &'static str {
         Craft::Pdf => "Real PdfCraft reader built on the patched krilla/hayro stack.",
         Craft::Fig => "Real FigCraft vector design tool: frames, components, assets.",
         Craft::Draw => "drawio-native: green connection dots, arrow ends, XML/SVG/PNG/PDF export.",
-        Craft::Vector => "Illustrator-style tools: pen, bezier, layers, swatches, smart guides.",
         Craft::Markdown => "WordCraft-anatomy editor with live preview and settings.",
         Craft::Typeset => "Justified page layout engine with real PDF export.",
         Craft::Notes => "Multi-page notebook with markdown-lite preview.",
@@ -821,16 +807,6 @@ fn paint_craft_glyph(ui: &mut Ui, c: Craft, at: Pos2, size: f32, lift: f32) {
             l(pos2(10.5, 34.5), pos2(33.5, 34.5), 1.4);
             p.circle_filled(at + vec2(10.5 * s, 34.5 * s), 2.2 * s, accent);
         }
-        Craft::Vector => {
-            // bezier pen curve with anchor squares
-            p.add(Shape::line(
-                (0..=16).map(|i| at + vec2(4.0 * s + i as f32 * 2.25 * s, 30.0 * s - (i as f32 / 16.0 * std::f32::consts::PI).sin() * 16.0 * s)).collect(),
-                Stroke::new(1.5 * s, base),
-            ));
-            for q in [vec2(4.0, 30.0), vec2(40.0, 30.0)] {
-                p.rect_filled(Rect::from_center_size(at + q * s, vec2(5.0 * s, 5.0 * s)), 1.0, accent);
-            }
-        }
         Craft::Markdown => {
             p.rect_stroke(Rect::from_min_size(at + vec2(4.0 * s, 12.0 * s), vec2(36.0 * s, 20.0 * s)), CornerRadius::ZERO, Stroke::new(1.5 * s, base), StrokeKind::Middle);
             p.text(r.center() + vec2(0.0, 1.0), Align2::CENTER_CENTER, "M↓", FontId::proportional(11.0 * s), base);
@@ -881,7 +857,7 @@ fn about_window(ctx: &Context, open: &mut bool) {
                     ui.vertical(|ui| {
                         ui.label(RichText::new("THE SYSTEM").font(FontId::monospace(10.0)).color(theme::FAINT));
                         ui.add_space(4.0);
-                        ui.label(RichText::new("DocCraft hosts the real storytold craft systems — WordCraft, GridCraft, DeckCraft, PdfCraft and FigCraft — embedded unchanged from git submodules, plus five DocCraft-native crafts (Draw, Vector, Markdown, Typeset, Notes). Every upstream craft stays linked to its GitHub repo and can be updated independently.").size(13.0).color(theme::INK));
+                        ui.label(RichText::new("DocCraft hosts the real storytold craft systems — WordCraft, GridCraft, DeckCraft, PdfCraft and FigCraft — embedded unchanged from git submodules, plus four DocCraft-native crafts (Draw, Markdown, Typeset, Notes). Every upstream craft stays linked to its GitHub repo and can be updated independently.").size(13.0).color(theme::INK));
                         ui.add_space(12.0);
                         ui.label(RichText::new("CRAFTS & READINESS").font(FontId::monospace(10.0)).color(theme::FAINT));
                         ui.add_space(4.0);
@@ -902,7 +878,7 @@ fn about_window(ctx: &Context, open: &mut bool) {
                         ui.add_space(12.0);
                         ui.label(RichText::new("FILE TYPES THIS SYSTEM OPENS").font(FontId::monospace(10.0)).color(theme::FAINT));
                         ui.add_space(4.0);
-                        ui.label(RichText::new(".docx .doc .odt .rtf · .xlsx .xls .ods .csv · .pptx · .pdf · .drawio · .fig .svg .vec · .md · .typ .tex · .note").font(FontId::monospace(11.0)).color(theme::INK));
+                        ui.label(RichText::new(".docx .doc .odt .rtf · .xlsx .xls .ods .csv · .pptx · .pdf · .drawio · .fig .svg · .md · .typ .tex · .note").font(FontId::monospace(11.0)).color(theme::INK));
                         ui.add_space(8.0);
                         if ui.add(egui::Button::new(RichText::new("Register file associations (Windows)").size(12.0))).clicked() {
                             crate::register_associations::run();

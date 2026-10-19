@@ -4,4 +4,3 @@ pub use doccraft_drawio::ui::DrawApp as DrawCraft;
 pub use doccraft_md::ui::MdApp as MdCraft;
 pub use doccraft_notes::NotesApp as NotesCraft;
 pub use doccraft_typeset::ui::TypesetApp as TypesetCraft;
-pub use vector::VectorApp as VectorCraft;

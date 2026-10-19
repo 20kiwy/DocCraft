@@ -23,7 +23,38 @@ pub const HANDLE: f32 = 7.0;
 // drawio connection colors (spec §1 — three different "blues/greens")
 pub const CONNECT_BLUE: Color32 = Color32::from_rgb(0x29, 0xb6, 0xf2); // hover arrows, × markers, endpoint handles
 pub const TARGET_BLUE: Color32 = Color32::from_rgb(0x00, 0xa8, 0xff); // valid drop-target highlight
-const SNAP_GREEN: Color32 = Color32::from_rgb(0x00, 0xff, 0x00); // fixed-point snap ring
+const SNAP_GREEN: Color32 = Color32::from_rgb(0x00, 0xff, 0x00); // mxConstants.VALID_COLOR
+const INVALID_RED: Color32 = Color32::from_rgb(0xff, 0x00, 0x00); // mxConstants.INVALID_COLOR
+const MARKER_BLUE: Color32 = Color32::from_rgb(0x00, 0x88, 0xcf); // mxConstants.HANDLE_STROKECOLOR
+
+// ── drawio HoverIcons + connection spec (Graph.js / mxConnectionHandler v32.5.5) ──
+/// HoverIcons.arrowSpacing — the shape bbox is grown by this before arrows sit on it.
+const ARROW_SPACING: f32 = 2.0;
+/// HoverIcons.inactiveOpacity = 15 (% of 255 ≈ 38) — arrows fade when not approached.
+const ARROW_INACTIVE_ALPHA: u8 = 38;
+/// Editor.hintOffset — the "[x%, y%]" hint sits this far below the cursor.
+const HINT_OFFSET: f32 = 24.0;
+/// HoverIcons arrow SVG polygons, 1:1 px (arrowFill #29b6f2, stroke #fff).
+const ARROW_UP_PTS: [Pos2; 7] = [
+    Pos2::new(6.0, 26.0), Pos2::new(12.0, 26.0), Pos2::new(12.0, 12.0), Pos2::new(18.0, 12.0),
+    Pos2::new(9.0, 1.0), Pos2::new(1.0, 12.0), Pos2::new(6.0, 12.0),
+];
+const ARROW_RIGHT_PTS: [Pos2; 7] = [
+    Pos2::new(1.0, 6.0), Pos2::new(14.0, 6.0), Pos2::new(14.0, 1.0), Pos2::new(26.0, 9.0),
+    Pos2::new(14.0, 18.0), Pos2::new(14.0, 12.0), Pos2::new(1.0, 12.0),
+];
+const ARROW_DOWN_PTS: [Pos2; 7] = [
+    Pos2::new(6.0, 1.0), Pos2::new(6.0, 14.0), Pos2::new(1.0, 14.0), Pos2::new(9.0, 26.0),
+    Pos2::new(18.0, 14.0), Pos2::new(12.0, 14.0), Pos2::new(12.0, 1.0),
+];
+const ARROW_LEFT_PTS: [Pos2; 7] = [
+    Pos2::new(1.0, 9.0), Pos2::new(12.0, 1.0), Pos2::new(12.0, 6.0), Pos2::new(26.0, 6.0),
+    Pos2::new(26.0, 12.0), Pos2::new(12.0, 12.0), Pos2::new(12.0, 18.0),
+];
+const ARROW_UP_SIZE: (f32, f32) = (18.0, 28.0);
+const ARROW_RIGHT_SIZE: (f32, f32) = (26.0, 18.0);
+const ARROW_DOWN_SIZE: (f32, f32) = (18.0, 26.0);
+const ARROW_LEFT_SIZE: (f32, f32) = (28.0, 18.0);
 
 // ── mapping ──────────────────────────────────────────────────────────────────
 
@@ -212,10 +243,14 @@ pub fn show(app: &mut DrawApp, ui: &mut Ui) {
                 if hot {
                     painter.circle_stroke(sp, 9.0, Stroke::new(1.0, CONNECT_BLUE.linear_multiply(0.6)));
                 }
-                if hresp.drag_started() {
-                    app.push_undo();
+                // start on the raw press — drawio connects on mousedown, and
+                // egui 0.36 postpones drag_started for click_and_drag widgets
+                // (the arrows vanish once the pointer leaves the hover zone,
+                // which would kill a pending drag before the decision)
+                let press_on_handle = ui.input(|i| i.pointer.primary_down()) && hresp.hovered();
+                if press_on_handle {
                     let cur = s2w(ui.input(|i| i.pointer.latest_pos()).unwrap_or(sp));
-                    app.connect = ConnectState::EndpointDrag { edge: id.clone(), is_source, cur, snapped: None };
+                    app.connect = ConnectState::EndpointDrag { edge: id.clone(), is_source, cur, snapped: None, press: cur };
                     app.status = "Drag to re-link · drop on empty to dangle · Esc to cancel".into();
                 }
             }
@@ -548,6 +583,20 @@ fn canvas_input(
                         *snapped = snap;
                     }
                     _ => {}
+                }
+                // live drawio-style status while a new connection is dragged
+                if matches!(app.connect, ConnectState::Connecting { .. }) {
+                    app.status = match &app.connect {
+                        ConnectState::Connecting { snapped: Some(s), .. } if s.constraint.is_some() => {
+                            let (fx, fy) = s.constraint.unwrap();
+                            format!(
+                                "Release to connect at fixed point [{}%, {}%] · Esc cancels",
+                                (fx * 100.0).round(),
+                                (fy * 100.0).round()
+                            )
+                        }
+                        _ => "Release on a shape to connect · drop on empty for a dangling end · Esc cancels".into(),
+                    };
                 }
             }
             if ui.input(|i| i.pointer.any_released()) {
@@ -882,7 +931,7 @@ fn hover_arrows(
     w2s: &impl Fn(Pos2) -> Pos2,
     s2w: &impl Fn(Pos2) -> Pos2,
 ) {
-    if app.tool != Tool::Select || app.edit_label.is_some() || app.drag != Drag::None || app.connect.active() || !app.ctx_menu.is_none() {
+    if app.tool != Tool::Select || app.edit_label.is_some() || app.drag != Drag::None || app.connect.active() || app.ctx_menu.is_some() {
         return;
     }
     let page = app.page().clone();
@@ -890,10 +939,10 @@ fn hover_arrows(
     let hov_id = ptr.and_then(|p| pick_vertex(&page, s2w(p), false)).map(|c| c.id.clone());
     // keep hover alive while the pointer is on the arrows themselves
     let keep = match (&app.hover, ptr) {
-        (Some((id, _)), Some(p)) => page.cell(id).map(|c| c.rect().expand(24.0).contains(s2w(p))).unwrap_or(false),
+        (Some((id, _)), Some(p)) => page.cell(id).map(|c| c.rect().expand(30.0).contains(s2w(p))).unwrap_or(false),
         _ => false,
     };
-    // wall-clock hover timing (robust when the app repaints only on input)
+    // wall-clock hover timing (drawio: HoverIcons.activationDelay = 140 ms)
     let now = ui.input(|i| i.time) as f32;
     match (&app.hover, &hov_id) {
         (Some((id, t0)), Some(h)) if id == h => app.hover = Some((id.clone(), *t0)),
@@ -904,39 +953,61 @@ fn hover_arrows(
     if app.hover.is_some() {
         ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));
     }
-    // the shape showing arrows: hovered (after 140ms) or the single selection
-    let mut target = match &app.hover {
-        Some((id, t0)) if now - *t0 >= 0.14 => Some(id.clone()),
-        _ => None,
+    // drawio shows arrows on the hovered vertex only, after 140 ms
+    let Some((tid, _)) = app.hover.clone().filter(|(_, t0)| now - *t0 >= 0.14) else {
+        return;
     };
-    if target.is_none() && app.selected.len() == 1 && page.cell(&app.selected[0]).map(|c| c.vertex).unwrap_or(false) {
-        target = app.selected.first().cloned();
-    }
-    let Some(tid) = target else { return };
     let Some(cell) = page.cell(&tid).cloned() else { return };
     if page.layer_locked(&cell) || !page.layer_visible(&cell) {
         return;
     }
-    let r = Rect::from_min_size(w2s(Pos2::new(cell.geom.x, cell.geom.y)), Vec2::new(cell.geom.w * app.zoom, cell.geom.h * app.zoom));
-    let tri = 10.0f32;
-    let gap = 2.0f32;
-    for (dx, dy) in [(-1.0f32, 0.0), (1.0, 0.0), (0.0, -1.0), (0.0, 1.0)] {
-        let dir = Vec2::new(dx, dy);
-        let center = if dx != 0.0 {
-            Pos2::new(if dx > 0.0 { r.right() + gap + tri / 2.0 } else { r.left() - gap - tri / 2.0 }, r.center().y)
-        } else {
-            Pos2::new(r.center().x, if dy > 0.0 { r.bottom() + gap + tri / 2.0 } else { r.top() - gap - tri / 2.0 })
-        };
-        if !rect.contains(center) {
+    let shape_r = Rect::from_min_size(
+        w2s(Pos2::new(cell.geom.x, cell.geom.y)),
+        Vec2::new(cell.geom.w * app.zoom, cell.geom.h * app.zoom),
+    );
+    // HoverIcons.repaint: bds = state bbox grown by tolerance(0) + arrowSpacing(2);
+    // Up sits at (cx − w/2, bds.top − h), Right at (bds.right, cy − h/2), …
+    let b = shape_r.expand(ARROW_SPACING);
+    let (cx, cy) = (shape_r.center().x, shape_r.center().y);
+    let arrows: [(&[Pos2], (f32, f32), Pos2, (f32, f32)); 4] = [
+        (&ARROW_UP_PTS, ARROW_UP_SIZE, Pos2::new(cx - ARROW_UP_SIZE.0 / 2.0, b.top() - ARROW_UP_SIZE.1), (0.5, 0.0)),
+        (&ARROW_RIGHT_PTS, ARROW_RIGHT_SIZE, Pos2::new(b.right(), cy - ARROW_RIGHT_SIZE.1 / 2.0), (1.0, 0.5)),
+        (&ARROW_DOWN_PTS, ARROW_DOWN_SIZE, Pos2::new(cx - ARROW_DOWN_SIZE.0 / 2.0, b.bottom()), (0.5, 1.0)),
+        (&ARROW_LEFT_PTS, ARROW_LEFT_SIZE, Pos2::new(b.left() - ARROW_LEFT_SIZE.0, cy - ARROW_LEFT_SIZE.1 / 2.0), (0.0, 0.5)),
+    ];
+    let inside_shape = ptr.map(|p| shape_r.expand(2.0).contains(p)).unwrap_or(false);
+    // drawio draws edge-endpoint handles ABOVE the hover icons — when a
+    // selected edge's endpoint sits at a fixed point, its handle must win the
+    // press over the shape's arrow (mxConstraintHandler/overlay pane order).
+    let endpoint_handles: Vec<Rect> = app
+        .selected
+        .first()
+        .and_then(|id| page.cell(id))
+        .filter(|c| c.edge)
+        .map(|c| connection::route_points(&page, c))
+        .map(|pts| {
+            pts.first()
+                .into_iter()
+                .chain(pts.last().into_iter())
+                .map(|p| Rect::from_center_size(w2s(*p), Vec2::splat(14.0)))
+                .collect()
+        })
+        .unwrap_or_default();
+    for (pts, (aw, ah), pos, side_n) in arrows {
+        let box_r = Rect::from_min_size(pos, Vec2::new(aw, ah));
+        if !rect.intersects(box_r.expand(1.0)) {
             continue;
         }
-        // arrows must not overlap other cells
-        let ar = Rect::from_center_size(center, Vec2::splat(tri + 4.0));
+        if endpoint_handles.iter().any(|h| h.intersects(box_r)) {
+            continue;
+        }
+        // drawio issue #1029 ("Connection and arrows misbehave in tight spaces"):
+        // skip an arrow that would sit on top of another cell
         let overlapped = page.cells.iter().any(|o| {
             o.vertex
                 && o.id != cell.id
                 && page.layer_visible(o)
-                && ar.intersects(Rect::from_min_size(
+                && box_r.intersects(Rect::from_min_size(
                     w2s(Pos2::new(o.geom.x, o.geom.y)),
                     Vec2::new(o.geom.w * app.zoom, o.geom.h * app.zoom),
                 ))
@@ -944,29 +1015,28 @@ fn hover_arrows(
         if overlapped {
             continue;
         }
-        let hresp = ui.allocate_rect(Rect::from_center_size(center, Vec2::splat(tri + 7.0)), Sense::click_and_drag());
-        let fill = if hresp.hovered() || hresp.dragged() { CONNECT_BLUE } else { CONNECT_BLUE.linear_multiply(0.88) };
-        let side = Vec2::new(-dir.y, dir.x);
-        let tip = center + dir * (tri * 0.55);
-        let b1 = center - dir * (tri * 0.45) + side * (tri * 0.5);
-        let b2 = center - dir * (tri * 0.45) - side * (tri * 0.5);
-        painter.add(Shape::convex_polygon(vec![tip, b1, b2], fill, Stroke::new(1.2, HANDLE_FILL)));
-        let side_n = if dx > 0.0 {
-            (1.0, 0.5)
-        } else if dx < 0.0 {
-            (0.0, 0.5)
-        } else if dy > 0.0 {
-            (0.5, 1.0)
-        } else {
-            (0.5, 0.0)
-        };
-        if hresp.drag_started() {
-            app.push_undo();
-            let cur = ui.input(|i| i.pointer.latest_pos().map(s2w).unwrap_or(center));
-            app.connect = ConnectState::Connecting { source: cell.id.clone(), side: Some(side_n), cur, snapped: None };
-            app.status = "Release on a shape to connect · drop on empty for a dangling end · Esc cancels".into();
-        } else if hresp.clicked() {
-            create_connected_vertex(app, &cell, dir);
+        let hresp = ui.allocate_rect(box_r.expand(3.0), Sense::click_and_drag());
+        // inactiveOpacity 15 until the pointer reaches the shape or the arrow
+        let alpha = if hresp.hovered() || hresp.dragged() || inside_shape { 255u8 } else { ARROW_INACTIVE_ALPHA };
+        let fill = Color32::from_rgba_unmultiplied(0x29, 0xb6, 0xf2, alpha);
+        let stroke_c = Color32::from_rgba_unmultiplied(0xff, 0xff, 0xff, alpha);
+        let poly: Vec<Pos2> = pts.iter().map(|p| pos + p.to_vec2()).collect();
+        painter.add(Shape::convex_polygon(poly, fill, Stroke::new(1.0, stroke_c)));
+        // drawio starts the connection on mousedown on the arrow; egui 0.36
+        // postpones drag_started for click_and_drag widgets and the arrows
+        // disappear once the pointer leaves the hover zone — so read the raw
+        // press instead of waiting for the drag decision.
+        let press_on_arrow = ui.input(|i| i.pointer.primary_down()) && hresp.hovered();
+        if press_on_arrow && !app.connect.active() {
+            let cur = ui.input(|i| i.pointer.latest_pos().map(s2w).unwrap_or(box_r.center()));
+            app.connect = ConnectState::Connecting {
+                source: cell.id.clone(),
+                side: Some(side_n),
+                cur,
+                snapped: None,
+                press: cur,
+            };
+            app.status = "Release on a shape to connect · click for a new node · Esc cancels".into();
         }
     }
 }
@@ -1024,9 +1094,17 @@ fn connect_overlay(
     }
     let page = app.page().clone();
     let zoom = app.zoom;
+    // live drag facts, used by every layer below
+    let (cur_world, snap_now) = match &app.connect {
+        ConnectState::Connecting { cur, snapped, .. } | ConnectState::EndpointDrag { cur, snapped, .. } => (*cur, snapped.clone()),
+        _ => return,
+    };
+    let target_under = connection::hovering_vertex(&page, cur_world);
+    let pinned = snap_now.as_ref().and_then(|s| s.constraint).is_some();
+    let valid = pinned || target_under.is_some();
     let (style, a, b) = match &app.connect {
-        ConnectState::Connecting { source, side, cur, snapped } => {
-            let end = snapped.as_ref().map(|s| s.pos).unwrap_or(*cur);
+        ConnectState::Connecting { source, side, .. } => {
+            let end = snap_now.as_ref().map(|s| s.pos).unwrap_or(cur_world);
             let a = match (*side, page.cell(source)) {
                 (Some((fx, fy)), Some(c)) => {
                     let r = c.rect();
@@ -1037,9 +1115,9 @@ fn connect_overlay(
             };
             (crate::model::DEFAULT_EDGE_STYLE.to_string(), a, end)
         }
-        ConnectState::EndpointDrag { edge, is_source, cur, snapped } => {
+        ConnectState::EndpointDrag { edge, is_source, .. } => {
             let Some(ec) = page.cell(edge) else { return };
-            let end = snapped.as_ref().map(|s| s.pos).unwrap_or(*cur);
+            let end = snap_now.as_ref().map(|s| s.pos).unwrap_or(cur_world);
             let Some(other) = connection::resolve_endpoint(&page, ec, !*is_source, end) else { return };
             let style = ec.style.clone();
             if *is_source {
@@ -1051,73 +1129,110 @@ fn connect_overlay(
         _ => return,
     };
 
-    // preview edge in the real current style (dashes stay dashes, no recolor)
+    // drawio mxConnectionHandler.createShape/getEdgeColor/getEdgeWidth: the
+    // preview is a DASHED polyline — GREEN #00FF00 w3 over a valid target,
+    // RED #FF0000 w1 over nothing; plain mxPolyline carries no arrow markers.
     let pts = connection::preview_route(&style, a, b);
     if pts.len() >= 2 {
-        let mut look = style::edge_look(&style, zoom);
-        look.stroke = look.stroke.gamma_multiply(0.85);
         let spts: Vec<Pos2> = pts.iter().map(|p| w2s(*p)).collect();
-        paint_edge(painter, &spts, &style, &look, &[], zoom);
+        let (w, col) = if valid {
+            ((3.0 * zoom).max(1.5), SNAP_GREEN)
+        } else {
+            ((1.0 * zoom).max(1.0), INVALID_RED)
+        };
+        painter.add(Shape::dashed_line(
+            &spts,
+            (w, col),
+            6.0 * zoom.max(0.5),
+            4.0 * zoom.max(0.5),
+        ));
     }
 
-    // drop-target highlight: #00a8ff outline, width 5, 50% opacity
-    let cur_world = match &app.connect {
-        ConnectState::Connecting { cur, .. } | ConnectState::EndpointDrag { cur, .. } => *cur,
-        _ => Pos2::ZERO,
+    // drop-target outline (mxConnectionHandler updateCurrentState): GREEN w5
+    // while snapped to a fixed connection point (OUTLINE_HIGHLIGHT_COLOR),
+    // else BLUE #00a8ff w5 at 50% on a plain valid hover.
+    let outline_of = |id: &str| -> Option<Rect> {
+        page.cell(id).map(|c| {
+            Rect::from_min_size(
+                w2s(Pos2::new(c.geom.x, c.geom.y)),
+                Vec2::new(c.geom.w * zoom, c.geom.h * zoom),
+            )
+        })
     };
-    let hovering = connection::hovering_vertex(&page, cur_world);
-    if let Some(h) = hovering {
-        let Some(hc) = page.cell(&h) else { return };
-        let hr = Rect::from_min_size(
-            w2s(Pos2::new(hc.geom.x, hc.geom.y)),
-            Vec2::new(hc.geom.w * zoom, hc.geom.h * zoom),
-        );
-        painter.rect_stroke(
-            hr,
-            CornerRadius::ZERO,
-            Stroke::new(5.0, TARGET_BLUE.gamma_multiply(0.5)),
-            StrokeKind::Outside,
-        );
+    if pinned {
+        if let Some(s) = &snap_now
+            && let Some(r) = outline_of(&s.shape)
+        {
+            painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(5.0, SNAP_GREEN.gamma_multiply(0.5)), StrokeKind::Outside);
+        }
+    } else if let Some(h) = &target_under
+        && let Some(r) = outline_of(h)
+    {
+        painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(5.0, TARGET_BLUE.gamma_multiply(0.5)), StrokeKind::Outside);
     }
 
-    // fixed-point × markers on connectable shapes under the cursor
-    let tol = 4.0 / zoom.max(0.2);
-    for c in &page.cells {
-        if !c.vertex || !page.layer_visible(c) {
-            continue;
-        }
-        let cr = c.rect().expand(tol * 3.0);
-        if !cr.contains(cur_world) {
-            continue;
-        }
+    // fixed-point × markers on the shape the cursor is working on (drawio
+    // constraint-handler focus points; #5627/#5683 keep them exact + stable)
+    let mut marked: Vec<&str> = Vec::new();
+    if let Some(s) = &snap_now {
+        marked.push(s.shape.as_str());
+    }
+    if let Some(h) = &target_under {
+        marked.push(h.as_str());
+    }
+    marked.dedup();
+    for id in marked {
+        let Some(c) = page.cell(id) else { continue };
         for p in connection::fixed_points_world(c) {
             let sp = w2s(p);
             if !rect.contains(sp) {
                 continue;
             }
-            paint_cross(painter, sp, 3.5, HANDLE_FILL, Stroke::new(3.0, HANDLE_FILL.gamma_multiply(0.35)));
-            paint_cross(painter, sp, 2.5, CONNECT_BLUE, Stroke::new(1.6, CONNECT_BLUE));
+            paint_cross(painter, sp, 3.5, MARKER_BLUE, Stroke::new(3.0, MARKER_BLUE.gamma_multiply(0.35)));
+            paint_cross(painter, sp, 2.5, MARKER_BLUE, Stroke::new(1.6, MARKER_BLUE));
         }
     }
 
-    // snap ring: ~12px #00FF00 filled ellipse at 50% opacity
-    let snap = match &app.connect {
-        ConnectState::Connecting { snapped, .. } | ConnectState::EndpointDrag { snapped, .. } => snapped.clone(),
-        _ => None,
-    };
-    if let Some(s) = snap
-        && s.constraint.is_some()
+    // snap dot: green circle exactly at the fixed point …
+    if pinned
+        && let Some(s) = &snap_now
     {
         let sp = w2s(s.pos);
         painter.circle_filled(sp, 6.0, Color32::from_rgba_unmultiplied(0x00, 0xff, 0x00, 128));
         painter.circle_stroke(sp, 6.0, Stroke::new(1.2, SNAP_GREEN.gamma_multiply(0.9)));
+        // … plus drawio's edge-handler hint "«[x%, y%]»" (Graph.js updateHint)
+        // in the geHint style: light box, 1px #ddd border, 9pt text, 80%.
+        let (fx, fy) = s.constraint.unwrap();
+        let text = format!("[{}%, {}%]", (fx * 100.0).round(), (fy * 100.0).round());
+        let galley = painter.layout_no_wrap(text, FontId::proportional(10.5), Color32::from_rgb(0x33, 0x33, 0x33));
+        let cs = w2s(cur_world);
+        let pos = Pos2::new(cs.x - galley.size().x / 2.0 - 16.0, cs.y.max(sp.y) + HINT_OFFSET);
+        let hr = Rect::from_min_size(pos, galley.size() + Vec2::new(32.0, 8.0));
+        painter.rect_filled(hr, CornerRadius::same(3), Color32::from_white_alpha(204));
+        painter.rect_stroke(hr, CornerRadius::same(3), Stroke::new(1.0, Color32::from_rgb(0xdd, 0xdd, 0xdd)), StrokeKind::Inside);
+        painter.galley(hr.min + Vec2::new(16.0, 4.0), galley, Color32::from_rgb(0x33, 0x33, 0x33));
     }
 }
 
 /// Commit a connection drag: link / re-link / dangle per the snap state.
 fn commit_connect(app: &mut DrawApp) {
     match app.connect.clone() {
-        ConnectState::Connecting { source, side, cur, snapped } => {
+        ConnectState::Connecting { source, side, cur, snapped, press } => {
+            // drawio: press+release on an arrow without moving creates a new
+            // connected node (mxGraph defaultEdgeLength away) — resolve the
+            // click-vs-drag ambiguity here, at release time.
+            if cur.distance(press) < 6.0
+                && let Some(c) = app.page().cell(&source).cloned()
+            {
+                let (fx, fy) = side.unwrap_or((0.5, 0.5));
+                let dir = Vec2::new(
+                    if fx > 0.5 { 1.0 } else if fx < 0.5 { -1.0 } else { 0.0 },
+                    if fy > 0.5 { 1.0 } else if fy < 0.5 { -1.0 } else { 0.0 },
+                );
+                create_connected_vertex(app, &c, dir);
+                app.connect = ConnectState::Idle;
+                return;
+            }
             app.push_undo();
             let hover = connection::hovering_vertex(app.page(), cur);
             let sid = source.clone();
@@ -1153,19 +1268,24 @@ fn commit_connect(app: &mut DrawApp) {
                 "Connected".into()
             };
         }
-        ConnectState::EndpointDrag { edge, is_source, cur, snapped } => {
-            app.push_undo();
-            let hover = connection::hovering_vertex(app.page(), cur);
-            app.edit_page(|page| {
-                if let Some(c) = page.cell_mut(&edge) {
-                    match (&snapped, &hover) {
-                        (Some(s), _) => c.link(is_source, Some(s.shape.clone()), s.constraint, None),
-                        (None, Some(h)) => c.link(is_source, Some(h.clone()), None, None),
-                        (None, None) => c.link(is_source, None, None, Some((cur.x, cur.y))),
+        ConnectState::EndpointDrag { edge, is_source, cur, snapped, press } => {
+            if cur.distance(press) < 6.0 {
+                // a plain click on an endpoint changes nothing
+                app.status = "Endpoint unchanged".into();
+            } else {
+                app.push_undo();
+                let hover = connection::hovering_vertex(app.page(), cur);
+                app.edit_page(|page| {
+                    if let Some(c) = page.cell_mut(&edge) {
+                        match (&snapped, &hover) {
+                            (Some(s), _) => c.link(is_source, Some(s.shape.clone()), s.constraint, None),
+                            (None, Some(h)) => c.link(is_source, Some(h.clone()), None, None),
+                            (None, None) => c.link(is_source, None, None, Some((cur.x, cur.y))),
+                        }
                     }
-                }
-            });
-            app.status = if snapped.is_some() { "Endpoint re-linked".into() } else { "Endpoint released".into() };
+                });
+                app.status = if snapped.is_some() { "Endpoint re-linked".into() } else { "Endpoint released".into() };
+            }
         }
         _ => {}
     }

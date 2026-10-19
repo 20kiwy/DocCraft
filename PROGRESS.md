@@ -1,3 +1,31 @@
+# 3.3.0 — drawio connection parity + Vector craft removed
+
+- **Vector (Illustrator-style) craft removed** per user request: the suite is
+  now NINE crafts (5 real + Draw/Markdown/Typeset/Notes). `.vec` routing and
+  the file association were dropped; `.svg` now routes to Design (FigCraft).
+- **Draw craft matched to the real drawio JS** (jgraph/drawio v32.5.5, now a
+  git submodule at `upstream/drawio` so the spec source ships with the repo):
+  - hover arrows = exact HoverIcons SVG paths/sizes/placement (Graph.js
+    `HoverIcons.prototype.repaint`), 140 ms activation, 15% inactive opacity
+  - preview edge = mxConnectionHandler `createShape` semantics: DASHED, green
+    #00FF00 w3 over a valid target, red #FF0000 w1 over empty space, no markers
+  - drop-target outline: green w5 when snapped to a fixed point
+    (OUTLINE_HIGHLIGHT_COLOR), blue #00a8ff w5 @50% on plain valid hover
+  - the drawio `[x%, y%]` hint (Graph.js `mxEdgeHandler.prototype.updateHint`
+    + geHint CSS) shows while connecting/re-linking at a fixed point
+  - connections now start on mousedown (drawio parity) — egui 0.36 postpones
+    `drag_started` for click_and_drag widgets, which killed drags that left
+    the hover zone before the decision; click-vs-drag is resolved at release
+    (no movement = drawio's "click an arrow → new connected node")
+  - edge-endpoint handles beat hover arrows when they coincide (drawio overlay
+    order); endpoint re-binding tested end-to-end
+  - upstream issues referenced: jgraph/drawio #1029 (tight spaces), #5627
+    (1px-shifted points), #3469 (rotated constraints), #5683 (scale merge)
+- **Automated test**: `crates/drawio/examples/connect-demo.rs` +
+  `shots/connect-test.sh` (Xvfb + xdotool drag-and-drop; asserts the edge
+  really LINKS with pinned exit/entry, then re-links the endpoint).
+- Version 3.3.0.
+
 # DocCraft 3.1 — Progress & Shift-of-Things
 
 **"Check figcraft well for drawio well, make the drawio well add more
