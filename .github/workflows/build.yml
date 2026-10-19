@@ -37,8 +37,11 @@ jobs:
             os: windows-latest
             target: x86_64-pc-windows-msvc
             exe: doccraft.exe
+          # Intel macOS binary is CROSS-COMPILED on the Apple Silicon runner:
+          # the macos-13 Intel runner pool is retired and jobs queue forever.
+          # The Xcode SDK on arm64 builds the x86_64 slice natively.
           - name: macos-x64
-            os: macos-13
+            os: macos-14
             target: x86_64-apple-darwin
             exe: doccraft
           - name: macos-arm64
@@ -86,7 +89,7 @@ jobs:
         shell: bash
         env:
           LIBCLANG_PATH: ${{ runner.os == 'Windows' && 'C:\\Program Files\\LLVM\\bin' || '' }}
-        run: cargo build --profile fast
+        run: cargo build --profile fast --target ${{ matrix.target }}
 
       - name: Package (Linux / macOS)
         if: runner.os != 'Windows'
@@ -95,7 +98,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           NAME="doccraft-${VERSION}-${{ matrix.name }}"
           mkdir -p "dist/$NAME"
-          cp "target/fast/${{ matrix.exe }}" "dist/$NAME/"
+          cp "target/${{ matrix.target }}/fast/${{ matrix.exe }}" "dist/$NAME/"
           cp README.md CRAFT-STATUS.md "dist/$NAME/"
           chmod +x "dist/$NAME/doccraft"
           cd dist && zip -r "$NAME.zip" "$NAME"
@@ -108,7 +111,7 @@ jobs:
           $version = "$env:GITHUB_REF_NAME" -replace '^v',''
           $name = "doccraft-$version-windows-x64"
           New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
-          Copy-Item target/fast/doccraft.exe "dist/$name/"
+          Copy-Item "target/${{ matrix.target }}/fast/doccraft.exe" "dist/$name/"
           Copy-Item -Recurse -Force windows "dist/$name/windows"
           Copy-Item README.md "dist/$name/"
           Copy-Item CRAFT-STATUS.md "dist/$name/"
