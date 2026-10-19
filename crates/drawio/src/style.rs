@@ -134,7 +134,47 @@ pub const FONT_SIZES: [f32; 14] = [6.0, 8.0, 9.0, 10.0, 11.0, 12.0, 14.0, 16.0, 
 
 pub const FONTS: [&str; 4] = ["Helvetica", "Times New Roman", "Courier New", "Georgia"];
 
-/// Arrow-end presets: (label, mxGraph value for `startArrow`/`endArrow`).
+/// Arrow-end menu (Format panel "Line start" / "Line end"), exactly as in
+/// drawio: each entry sets `<start|end>Arrow` + `<start|end>Fill`.
+/// `fill = None` marks the per-end default ("Circle": start filled, end open).
+pub const ARROW_MENU: [(&str, &str, Option<bool>); 34] = [
+    ("None", "none", Some(false)),
+    ("Classic", "classic", Some(true)),
+    ("Classic Thin", "classicThin", Some(true)),
+    ("Open", "open", Some(false)),
+    ("Open Thin", "openThin", Some(false)),
+    ("Open Async", "openAsync", Some(false)),
+    ("Block", "block", Some(true)),
+    ("Block Thin", "blockThin", Some(true)),
+    ("Async", "async", Some(true)),
+    ("Oval", "oval", Some(true)),
+    ("Diamond", "diamond", Some(true)),
+    ("Diamond Thin", "diamondThin", Some(true)),
+    ("Classic (open)", "classic", Some(false)),
+    ("Classic Thin (open)", "classicThin", Some(false)),
+    ("Block (open)", "block", Some(false)),
+    ("Block Thin (open)", "blockThin", Some(false)),
+    ("Async (open)", "async", Some(false)),
+    ("Oval (open)", "oval", Some(false)),
+    ("Diamond (open)", "diamond", Some(false)),
+    ("Diamond Thin (open)", "diamondThin", Some(false)),
+    ("Box", "box", Some(false)),
+    ("Half Circle", "halfCircle", Some(false)),
+    ("Dash", "dash", Some(false)),
+    ("Cross", "cross", Some(false)),
+    ("Circle Plus", "circlePlus", Some(false)),
+    ("Circle", "circle", None),
+    ("Base Dash", "baseDash", Some(false)),
+    ("ER one", "ERone", Some(false)),
+    ("ER mand one", "ERmandOne", Some(false)),
+    ("ER many", "ERmany", Some(false)),
+    ("ER one-to-many", "ERoneToMany", Some(false)),
+    ("ER zero-to-one", "ERzeroToOne", Some(false)),
+    ("ER zero-to-many", "ERzeroToMany", Some(false)),
+    ("Double Block", "doubleBlock", Some(true)),
+];
+
+/// Legacy small arrow row (kept for quick-pick rows in the panel).
 pub const ARROWS: [(&str, &str); 10] = [
     ("None", "none"),
     ("Classic", "classic"),
@@ -271,23 +311,29 @@ pub enum Align {
     Max,
 }
 
-/// Edge routing flavor.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EdgeRoute {
-    Orthogonal,
-    Straight,
-    Curved,
-}
+/// Edge routing flavor — typed vocabulary lives in [`crate::model`]; the
+/// parser reads `edgeStyle`/`elbow`/`curved` from the style string.
+pub use crate::model::EdgeRoute;
 
 pub fn edge_route(style: &str) -> EdgeRoute {
     match get(style, "edgeStyle") {
-        Some("orthogonalEdgeStyle") | Some("elbowEdgeStyle") => {
+        Some("orthogonalEdgeStyle") => {
             if get_bool(style, "curved", false) {
                 EdgeRoute::Curved
             } else {
                 EdgeRoute::Orthogonal
             }
         }
+        Some("elbowEdgeStyle") => {
+            if get_bool(style, "curved", false) {
+                EdgeRoute::Curved
+            } else if get(style, "elbow") == Some("vertical") {
+                EdgeRoute::ElbowH
+            } else {
+                EdgeRoute::ElbowV
+            }
+        }
+        Some("entityRelationEdgeStyle") => EdgeRoute::EntityRelation,
         Some("straightEdgeStyle") | Some("none") => EdgeRoute::Straight,
         _ => {
             if get_bool(style, "curved", false) {
@@ -299,9 +345,21 @@ pub fn edge_route(style: &str) -> EdgeRoute {
     }
 }
 
-/// Per-edge line-jump style (`jumpStyle=arc`).
+/// Edge line jump style (`jumpStyle=arc|gap|sharp|line`); `None` = no jumps.
+pub fn jump_style(style: &str) -> crate::model::JumpStyle {
+    get(style, "jumpStyle").and_then(crate::model::JumpStyle::from_str).unwrap_or(crate::model::JumpStyle::None)
+}
+
+/// Per-edge line-jump rendering enabled?
 pub fn line_jump(style: &str) -> bool {
-    get(style, "jumpStyle").map(|v| v != "none").unwrap_or(false)
+    jump_style(style) != crate::model::JumpStyle::None
+}
+
+/// Perimeter offset in model units for one edge end
+/// (`sourcePerimeterSpacing` → `perimeterSpacing` → 0).
+pub fn perimeter_spacing(style: &str, source: bool) -> f32 {
+    let key = if source { "sourcePerimeterSpacing" } else { "targetPerimeterSpacing" };
+    get_f32(style, key, get_f32(style, "perimeterSpacing", 0.0))
 }
 
 /// A human name for the shape behind a style (status bar / context menus).

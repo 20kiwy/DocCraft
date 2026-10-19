@@ -7,6 +7,188 @@
 
 use serde::{Deserialize, Serialize};
 
+// ── edge vocabulary (mxGraph style keys, typed for the editor) ───────────────
+
+/// mxGraph arrow/marker kinds — the exact set behind the Format panel's
+/// "Line start" / "Line end" dropdowns (`startArrow`/`endArrow` keys).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArrowKind {
+    None,
+    Classic,
+    ClassicThin,
+    Open,
+    OpenThin,
+    OpenAsync,
+    Block,
+    BlockThin,
+    Async,
+    Oval,
+    Diamond,
+    DiamondThin,
+    Box,
+    HalfCircle,
+    Dash,
+    Cross,
+    CirclePlus,
+    Circle,
+    BaseDash,
+    ErOne,
+    ErMandOne,
+    ErMany,
+    ErOneToMany,
+    ErZeroToOne,
+    ErZeroToMany,
+    DoubleBlock,
+}
+
+impl ArrowKind {
+    pub const ALL: [ArrowKind; 26] = [
+        ArrowKind::None,
+        ArrowKind::Classic,
+        ArrowKind::ClassicThin,
+        ArrowKind::Open,
+        ArrowKind::OpenThin,
+        ArrowKind::OpenAsync,
+        ArrowKind::Block,
+        ArrowKind::BlockThin,
+        ArrowKind::Async,
+        ArrowKind::Oval,
+        ArrowKind::Diamond,
+        ArrowKind::DiamondThin,
+        ArrowKind::Box,
+        ArrowKind::HalfCircle,
+        ArrowKind::Dash,
+        ArrowKind::Cross,
+        ArrowKind::CirclePlus,
+        ArrowKind::Circle,
+        ArrowKind::BaseDash,
+        ArrowKind::ErOne,
+        ArrowKind::ErMandOne,
+        ArrowKind::ErMany,
+        ArrowKind::ErOneToMany,
+        ArrowKind::ErZeroToOne,
+        ArrowKind::ErZeroToMany,
+        ArrowKind::DoubleBlock,
+    ];
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ArrowKind::None => "none",
+            ArrowKind::Classic => "classic",
+            ArrowKind::ClassicThin => "classicThin",
+            ArrowKind::Open => "open",
+            ArrowKind::OpenThin => "openThin",
+            ArrowKind::OpenAsync => "openAsync",
+            ArrowKind::Block => "block",
+            ArrowKind::BlockThin => "blockThin",
+            ArrowKind::Async => "async",
+            ArrowKind::Oval => "oval",
+            ArrowKind::Diamond => "diamond",
+            ArrowKind::DiamondThin => "diamondThin",
+            ArrowKind::Box => "box",
+            ArrowKind::HalfCircle => "halfCircle",
+            ArrowKind::Dash => "dash",
+            ArrowKind::Cross => "cross",
+            ArrowKind::CirclePlus => "circlePlus",
+            ArrowKind::Circle => "circle",
+            ArrowKind::BaseDash => "baseDash",
+            ArrowKind::ErOne => "ERone",
+            ArrowKind::ErMandOne => "ERmandOne",
+            ArrowKind::ErMany => "ERmany",
+            ArrowKind::ErOneToMany => "ERoneToMany",
+            ArrowKind::ErZeroToOne => "ERzeroToOne",
+            ArrowKind::ErZeroToMany => "ERzeroToMany",
+            ArrowKind::DoubleBlock => "doubleBlock",
+        }
+    }
+
+    pub fn from_str(v: &str) -> Option<Self> {
+        ArrowKind::ALL.iter().copied().find(|k| k.as_str() == v)
+    }
+
+    /// mxGraph default fill for the kind when `xFill` is absent.
+    pub fn default_fill(&self) -> bool {
+        matches!(
+            self,
+            ArrowKind::Classic
+                | ArrowKind::ClassicThin
+                | ArrowKind::Block
+                | ArrowKind::BlockThin
+                | ArrowKind::Async
+                | ArrowKind::Oval
+                | ArrowKind::Diamond
+                | ArrowKind::DiamondThin
+                | ArrowKind::DoubleBlock
+        )
+    }
+}
+
+/// Edge line-jump style (`jumpStyle` key).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JumpStyle {
+    None,
+    Arc,
+    Gap,
+    Sharp,
+    Line,
+}
+
+impl JumpStyle {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            JumpStyle::None => "none",
+            JumpStyle::Arc => "arc",
+            JumpStyle::Gap => "gap",
+            JumpStyle::Sharp => "sharp",
+            JumpStyle::Line => "line",
+        }
+    }
+    pub fn from_str(v: &str) -> Option<Self> {
+        Some(match v {
+            "arc" => JumpStyle::Arc,
+            "gap" => JumpStyle::Gap,
+            "sharp" => JumpStyle::Sharp,
+            "line" => JumpStyle::Line,
+            _ => return None,
+        })
+    }
+}
+
+/// Edge routing flavor (`edgeStyle` + `elbow` + `curved` keys).
+///
+/// Lives here so the model has the full typed vocabulary; [`crate::style`]
+/// re-exports it for painters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EdgeRoute {
+    Orthogonal,
+    Straight,
+    ElbowH,
+    ElbowV,
+    EntityRelation,
+    Curved,
+}
+
+impl EdgeRoute {
+    /// (edgeStyle value, elbow value or `None`) for writing back. `Straight`
+    /// has no `edgeStyle` key (mxGraph default routing = straight).
+    pub fn style_kv(&self) -> (Option<&'static str>, Option<&'static str>) {
+        match self {
+            EdgeRoute::Straight => (None, None),
+            EdgeRoute::Orthogonal => (Some("orthogonalEdgeStyle"), None),
+            EdgeRoute::ElbowH => (Some("elbowEdgeStyle"), Some("vertical")),
+            EdgeRoute::ElbowV => (Some("elbowEdgeStyle"), None),
+            EdgeRoute::EntityRelation => (Some("entityRelationEdgeStyle"), None),
+            EdgeRoute::Curved => (Some("orthogonalEdgeStyle"), None),
+        }
+    }
+}
+
+/// Style of the default new edge (`endArrow=classic;endFill=1`, orthogonal).
+pub const DEFAULT_EDGE_STYLE: &str = "edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;endFill=1;";
+
+/// Style of the default new vertex.
+pub const DEFAULT_VERTEX_STYLE: &str = "rounded=1;whiteSpace=wrap;html=1;";
+
 /// One opened `.drawio` file — a workbook of named diagram pages.
 #[derive(Debug, Clone, Default)]
 pub struct MxFile {
@@ -99,6 +281,119 @@ impl Cell {
     pub fn center(&self) -> (f32, f32) {
         (self.geom.x + self.geom.w / 2.0, self.geom.y + self.geom.h / 2.0)
     }
+
+    /// Bounding rect of a vertex in world coordinates.
+    pub fn rect(&self) -> egui::Rect {
+        egui::Rect::from_min_size(egui::Pos2::new(self.geom.x, self.geom.y), egui::Vec2::new(self.geom.w, self.geom.h))
+    }
+
+    // ── typed edge view (the mxGraph style string stays canonical storage) ──
+    //
+    // drawio stores every one of these as style keys / geometry; these
+    // accessors + setters expose them typed so the connection engine and the
+    // format panel don't re-parse strings everywhere. `Cell::link` keeps
+    // `source`/`target`/constraints/dangling points in sync in one call.
+
+    /// Fixed source anchor constraint (`exitX`,`exitY` in 0..1 shape coords).
+    pub fn exit(&self) -> Option<(f32, f32)> {
+        let x = crate::style::get_f32(&self.style, "exitX", f32::NAN);
+        let y = crate::style::get_f32(&self.style, "exitY", f32::NAN);
+        (x.is_finite() && y.is_finite()).then_some((x, y))
+    }
+
+    /// Fixed target anchor constraint (`entryX`,`entryY` in 0..1 shape coords).
+    pub fn entry(&self) -> Option<(f32, f32)> {
+        let x = crate::style::get_f32(&self.style, "entryX", f32::NAN);
+        let y = crate::style::get_f32(&self.style, "entryY", f32::NAN);
+        (x.is_finite() && y.is_finite()).then_some((x, y))
+    }
+
+    pub fn start_arrow(&self) -> ArrowKind {
+        crate::style::get(&self.style, "startArrow").and_then(ArrowKind::from_str).unwrap_or(ArrowKind::None)
+    }
+    pub fn end_arrow(&self) -> ArrowKind {
+        crate::style::get(&self.style, "endArrow").and_then(ArrowKind::from_str).unwrap_or(ArrowKind::Classic)
+    }
+    pub fn start_fill(&self) -> bool {
+        crate::style::get_bool(&self.style, "startFill", true)
+    }
+    pub fn end_fill(&self) -> bool {
+        crate::style::get_bool(&self.style, "endFill", true)
+    }
+    pub fn start_size(&self) -> f32 {
+        crate::style::get_f32(&self.style, "startSize", 6.0)
+    }
+    pub fn end_size(&self) -> f32 {
+        crate::style::get_f32(&self.style, "endSize", 6.0)
+    }
+    pub fn route(&self) -> EdgeRoute {
+        crate::style::edge_route(&self.style)
+    }
+    pub fn jump(&self) -> JumpStyle {
+        crate::style::get(&self.style, "jumpStyle").and_then(JumpStyle::from_str).unwrap_or(JumpStyle::None)
+    }
+    pub fn jump_size(&self) -> f32 {
+        crate::style::get_f32(&self.style, "jumpSize", 6.0)
+    }
+    /// Waypoints in world coordinates (mxGraph `Array as="points"`).
+    pub fn waypoints(&self) -> Vec<(f32, f32)> {
+        self.geom.points.clone()
+    }
+
+    /// Set `startArrow`/`endArrow` + matching `xFill` in one call.
+    pub fn set_arrow(&mut self, start: bool, kind: ArrowKind, fill: bool) {
+        let side = if start { "start" } else { "end" };
+        let fill_key = format!("{side}Fill");
+        self.style = crate::style::set(&self.style, &format!("{side}Arrow"), kind.as_str());
+        self.style = crate::style::set(&self.style, &fill_key, if fill { "1" } else { "0" });
+    }
+
+    pub fn set_start_size(&mut self, v: f32) {
+        self.style = crate::style::set(&self.style, "startSize", &fmt_num(v));
+    }
+    pub fn set_end_size(&mut self, v: f32) {
+        self.style = crate::style::set(&self.style, "endSize", &fmt_num(v));
+    }
+
+    /// Wire one end: cell id + fixed constraint, or a dangling world point.
+    /// Clears the complementary state on that end (constraints vs point).
+    pub fn link(
+        &mut self,
+        source: bool,
+        cell: Option<String>,
+        constraint: Option<(f32, f32)>,
+        point: Option<(f32, f32)>,
+    ) {
+        let (ck_x, ck_y, side) = if source {
+            ("exitX", "exitY", &mut self.source)
+        } else {
+            ("entryX", "entryY", &mut self.target)
+        };
+        *side = cell;
+        match constraint {
+            Some((x, y)) => {
+                self.style = crate::style::set(&self.style, ck_x, &fmt_num(x));
+                self.style = crate::style::set(&self.style, ck_y, &fmt_num(y));
+            }
+            None => {
+                self.style = crate::style::remove(&self.style, ck_x);
+                self.style = crate::style::remove(&self.style, ck_y);
+            }
+        }
+        if source {
+            self.geom.source_pt = point;
+        } else {
+            self.geom.target_pt = point;
+        }
+    }
+}
+
+fn fmt_num(v: f32) -> String {
+    if (v - v.round()).abs() < 1e-4 {
+        format!("{}", v.round() as i32)
+    } else {
+        format!("{v:.3}")
+    }
 }
 
 impl Diagram {
@@ -138,7 +433,7 @@ impl Diagram {
         self.cells.push(Cell {
             id: id.clone(),
             value: String::new(),
-            style: style.to_string(),
+            style: if style.is_empty() { DEFAULT_EDGE_STYLE.to_string() } else { style.to_string() },
             vertex: false,
             edge: true,
             source,

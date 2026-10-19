@@ -6,6 +6,7 @@
 //! [`crate::model`]; file I/O in [`crate::xmlio`].
 
 use crate::canvas::{self, CtxMenu};
+use crate::connection::ConnectState;
 use crate::model::{Cell, Diagram, MxFile};
 use crate::shapes;
 use crate::style;
@@ -37,7 +38,6 @@ pub enum Drag {
     Move { ids: Vec<String>, grab: Vec2, orig: Vec<(String, f32, f32)>, moved: bool },
     Resize { id: String, handle: u8, orig: (f32, f32, f32, f32) },
     Waypoint { id: String, idx: usize },
-    Edge { src: String, cur: Pos2 },
     Rubber { start: Pos2, cur: Pos2 },
     Minimap,
 }
@@ -56,6 +56,10 @@ pub struct DrawApp {
     pub zoom: f32,
     pub selected: Vec<String>,
     pub edge_from: Option<String>,
+    /// Connection drag state machine (crate::connection).
+    pub connect: ConnectState,
+    /// Hover tracking for the hover arrows: (cell id, seconds hovered).
+    pub hover: Option<(String, f32)>,
     pub status: String,
     pub drag: Drag,
     pub grid: f32,
@@ -93,6 +97,12 @@ pub struct DrawApp {
     find_case: bool,
     pages_open: bool,
     keys_open: bool,
+    /// Export dialog (File › Export As) + its options.
+    export_open: bool,
+    export_zoom: f32,
+    export_border: f32,
+    export_transparent: bool,
+    export_crop: bool,
 }
 
 impl Default for DrawApp {
@@ -110,6 +120,8 @@ impl DrawApp {
             zoom: 1.0,
             selected: Vec::new(),
             edge_from: None,
+            connect: ConnectState::Idle,
+            hover: None,
             status: "Ready — Draw craft (drawio native)".to_string(),
             drag: Drag::None,
             grid: 10.0,
@@ -139,6 +151,11 @@ impl DrawApp {
             find_case: false,
             pages_open: false,
             keys_open: false,
+            export_open: false,
+            export_zoom: 1.0,
+            export_border: 10.0,
+            export_transparent: false,
+            export_crop: false,
         }
     }
 
@@ -665,17 +682,59 @@ impl DrawApp {
         }
     }
 
-    pub fn export_svg(&mut self) {
-        let stem = self
-            .file
+    fn export_stem(&self) -> String {
+        self.file
             .path
             .as_deref()
             .map(|p| p.rsplit(['/', '\\']).next().unwrap_or(p))
             .and_then(|f| f.rsplit_once('.').map(|(s, _)| s.to_string()))
-            .unwrap_or_else(|| "doccraft-draw".into());
-        let svg = xmlio::write_svg(self.page());
+            .unwrap_or_else(|| "doccraft-draw".into())
+    }
+
+    fn export_opts(&self) -> crate::export::Opts {
+        crate::export::Opts {
+            zoom: self.export_zoom,
+            border: self.export_border,
+            transparent: self.export_transparent,
+            crop: self.export_crop,
+        }
+    }
+
+    pub fn export_svg(&mut self) {
+        let stem = self.export_stem();
+        let svg = crate::export::svg(self.page(), &self.export_opts());
         let p = std::env::temp_dir().join(format!("{stem}.svg"));
         match std::fs::write(&p, svg) {
+            Ok(_) => self.status = format!("Exported {}", p.display()),
+            Err(e) => self.status = format!("Export failed: {e}"),
+        }
+    }
+
+    pub fn export_png(&mut self) {
+        let stem = self.export_stem();
+        let png = crate::export::png(self.page(), &self.export_opts());
+        let p = std::env::temp_dir().join(format!("{stem}.png"));
+        match std::fs::write(&p, png) {
+            Ok(_) => self.status = format!("Exported {}", p.display()),
+            Err(e) => self.status = format!("Export failed: {e}"),
+        }
+    }
+
+    pub fn export_pdf(&mut self) {
+        let stem = self.export_stem();
+        let pdf = crate::export::pdf(self.page(), &self.export_opts());
+        let p = std::env::temp_dir().join(format!("{stem}.pdf"));
+        match std::fs::write(&p, pdf) {
+            Ok(_) => self.status = format!("Exported {}", p.display()),
+            Err(e) => self.status = format!("Export failed: {e}"),
+        }
+    }
+
+    pub fn export_drawio(&mut self) {
+        let stem = self.export_stem();
+        let xml = xmlio::write(&self.file);
+        let p = std::env::temp_dir().join(format!("{stem}.drawio"));
+        match std::fs::write(&p, xml) {
             Ok(_) => self.status = format!("Exported {}", p.display()),
             Err(e) => self.status = format!("Export failed: {e}"),
         }
@@ -762,6 +821,10 @@ impl DrawApp {
                 self.edge_from = None;
                 self.drag = Drag::None;
             }
+            if self.connect.active() {
+                self.connect = ConnectState::Idle;
+                self.status = "Connection cancelled".into();
+            }
         }
         // arrows nudge
         let arrows: [(egui::Key, f32, f32); 4] = [
@@ -824,12 +887,102 @@ impl DrawApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Draw").strong().size(12.5).color(ACCENT));
                     ui.separator();
-                    for name in ["File", "Edit", "View", "Arrange", "Extras", "Help"] {
-                        ui.label(egui::RichText::new(name).size(11.5).color(DIM));
-                    }
-                    if ui.link(egui::RichText::new("Shortcuts").size(11.0)).clicked() {
-                        self.keys_open = true;
-                    }
+                    ui.menu_button(egui::RichText::new("File").size(11.5).color(TEXT), |ui| {
+                        if ui.button("Save (Ctrl+S)").clicked() {
+                            self.save();
+                            ui.close();
+                        }
+                        ui.separator();
+                        ui.menu_button("Export As", |ui| {
+                            if ui.button("XML (.drawio)").clicked() {
+                                self.export_drawio();
+                                ui.close();
+                            }
+                            if ui.button("SVG (.svg)").clicked() {
+                                self.export_svg();
+                                ui.close();
+                            }
+                            if ui.button("PNG (.png)").clicked() {
+                                self.export_png();
+                                ui.close();
+                            }
+                            if ui.button("PDF (.pdf)").clicked() {
+                                self.export_pdf();
+                                ui.close();
+                            }
+                        });
+                        if ui.button("Export options…").clicked() {
+                            self.export_open = true;
+                            ui.close();
+                        }
+                    });
+                    ui.menu_button(egui::RichText::new("Edit").size(11.5).color(TEXT), |ui| {
+                        if ui.button("Undo (Ctrl+Z)").clicked() {
+                            self.undo();
+                            ui.close();
+                        }
+                        if ui.button("Redo (Ctrl+Y)").clicked() {
+                            self.redo();
+                            ui.close();
+                        }
+                        ui.separator();
+                        if ui.button("Copy (Ctrl+C)").clicked() {
+                            self.action_copy();
+                            ui.close();
+                        }
+                        if ui.button("Paste (Ctrl+V)").clicked() {
+                            let at = self.view_center_world();
+                            self.action_paste_at(at);
+                            ui.close();
+                        }
+                        if ui.button("Duplicate (Ctrl+D)").clicked() {
+                            self.action_duplicate();
+                            ui.close();
+                        }
+                        if ui.button("Delete (Del)").clicked() {
+                            self.action_delete();
+                            ui.close();
+                        }
+                        ui.separator();
+                        if ui.button("Select All (Ctrl+A)").clicked() {
+                            self.action_select_all();
+                            ui.close();
+                        }
+                        if ui.button("Find / Replace (Ctrl+F)").clicked() {
+                            self.find_open = true;
+                            ui.close();
+                        }
+                    });
+                    ui.menu_button(egui::RichText::new("View").size(11.5).color(TEXT), |ui| {
+                        if ui.checkbox(&mut self.show_grid, "Grid").changed() {
+                            ui.close();
+                        }
+                        if ui.checkbox(&mut self.show_guides, "Alignment guides").changed() {
+                            ui.close();
+                        }
+                        if ui.checkbox(&mut self.show_outline, "Minimap").changed() {
+                            ui.close();
+                        }
+                        ui.separator();
+                        if ui.button("Fit page").clicked() {
+                            canvas::fit_page(self);
+                            ui.close();
+                        }
+                    });
+                    ui.menu_button(egui::RichText::new("Extras").size(11.5).color(TEXT), |ui| {
+                        if ui.button("Edit Diagram XML (Ctrl+Shift+X)").clicked() {
+                            self.open_xml_editor();
+                            ui.close();
+                        }
+                        if ui.button("Page Setup…").clicked() {
+                            self.pages_open = true;
+                            ui.close();
+                        }
+                        if ui.button("Keyboard Shortcuts").clicked() {
+                            self.keys_open = true;
+                            ui.close();
+                        }
+                    });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let name = self.file.path.clone().unwrap_or_else(|| "Untitled.drawio".into());
                         let dot = if self.file.dirty { " ●" } else { "" };
@@ -1301,49 +1454,163 @@ impl DrawApp {
         });
 
         if is_edge {
+            // ── Route (edgeStyle / elbow / curved) ──
             ui.add_space(4.0);
             ui.label(egui::RichText::new("ROUTE").size(CAPTION).strong().color(DIM));
-            ui.horizontal(|ui| {
-                let route = style::edge_route(&cur_style);
-                for (label, kind, estyle) in [
-                    ("Orthogonal", style::EdgeRoute::Orthogonal, "orthogonalEdgeStyle"),
-                    ("Straight", style::EdgeRoute::Straight, "straightEdgeStyle"),
-                    ("Curved", style::EdgeRoute::Curved, "orthogonalEdgeStyle"),
-                ] {
-                    let active = route == kind;
-                    if ui.add(egui::Button::selectable(active, egui::RichText::new(label).size(10.5)).min_size(Vec2::new(74.0, 20.0))).clicked() {
-                        self.apply_style(|s| {
-                            *s = style::set(s, "edgeStyle", estyle);
-                            if kind == style::EdgeRoute::Curved {
-                                *s = style::set(s, "curved", "1");
-                            } else {
-                                *s = style::remove(s, "curved");
-                            }
-                        });
-                    }
-                }
-            });
-            ui.horizontal(|ui| {
-                let mut jump = style::line_jump(&cur_style);
-                if ui.toggle_value(&mut jump, "Line jumps").changed() {
-                    let v = if jump { "arc" } else { "none" };
-                    self.apply_style(|s| *s = style::set(s, "jumpStyle", v));
-                }
-            });
-            for (title, key) in [("Start arrow", "startArrow"), ("End arrow", "endArrow")] {
-                ui.label(egui::RichText::new(title).small().color(DIM));
-                let cur = style::get(&cur_style, key).unwrap_or(if key == "endArrow" { "classic" } else { "none" }).to_string();
-                ui.horizontal_wrapped(|ui| {
-                    ui.style_mut().spacing.item_spacing = Vec2::splat(3.0);
-                    for (label, val) in style::ARROWS {
-                        if ui.add(egui::Button::selectable(cur == val, egui::RichText::new(label).size(9.5)).min_size(Vec2::new(58.0, 17.0))).clicked() {
-                            let k = key.to_string();
-                            let v = val.to_string();
-                            self.apply_style(move |s| *s = style::set(s, &k, &v));
+            let route = style::edge_route(&cur_style);
+            let route_label = match route {
+                style::EdgeRoute::Straight => "Straight",
+                style::EdgeRoute::Orthogonal => "Orthogonal",
+                style::EdgeRoute::ElbowH => "H Elbow",
+                style::EdgeRoute::ElbowV => "V Elbow",
+                style::EdgeRoute::EntityRelation => "Entity Relation",
+                style::EdgeRoute::Curved => "Curved",
+            };
+            egui::ComboBox::from_id_salt("draw_route_pick")
+                .selected_text(route_label)
+                .width(ui.available_width() - 8.0)
+                .show_ui(ui, |ui| {
+                    for (label, kind) in [
+                        ("Straight", style::EdgeRoute::Straight),
+                        ("Orthogonal", style::EdgeRoute::Orthogonal),
+                        ("H Elbow", style::EdgeRoute::ElbowH),
+                        ("V Elbow", style::EdgeRoute::ElbowV),
+                        ("Entity Relation", style::EdgeRoute::EntityRelation),
+                        ("Curved", style::EdgeRoute::Curved),
+                    ] {
+                        let sel = route == kind;
+                        if ui.selectable_label(sel, label).clicked() && !sel {
+                            self.apply_style(|s| {
+                                let (estyle, elbow) = kind.style_kv();
+                                match estyle {
+                                    Some(v) => *s = style::set(s, "edgeStyle", v),
+                                    None => *s = style::remove(s, "edgeStyle"),
+                                }
+                                match elbow {
+                                    Some(v) => *s = style::set(s, "elbow", v),
+                                    None => {
+                                        *s = style::remove(s, "elbow");
+                                    }
+                                }
+                                if kind == style::EdgeRoute::Curved {
+                                    *s = style::set(s, "curved", "1");
+                                } else {
+                                    *s = style::remove(s, "curved");
+                                }
+                            });
                         }
                     }
                 });
+
+            // ── Line start / Line end (full drawio marker menu) ──
+            for (title, start) in [("Line start", true), ("Line end", false)] {
+                let fill_key = if start { "startFill" } else { "endFill" };
+                let (kind, want_fill) = {
+                    let cell = self.page().cell(&self.selected[0]);
+                    let k = match cell {
+                        Some(c) if start => c.start_arrow(),
+                        Some(c) => c.end_arrow(),
+                        _ => crate::model::ArrowKind::None,
+                    };
+                    let f = style::get_bool(&cur_style, fill_key, k.default_fill());
+                    (k, f)
+                };
+                let cur_label = style::ARROW_MENU
+                    .iter()
+                    .find(|(_, a, f)| {
+                        *a == kind.as_str()
+                            && match f {
+                                Some(v) => *v == want_fill,
+                                None => want_fill == start, // Circle: filled at start, open at end
+                            }
+                    })
+                    .map(|(l, _, _)| *l)
+                    .unwrap_or_else(|| kind.as_str());
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(title).small().color(DIM).strong());
+                    egui::ComboBox::from_id_salt(if start { "draw_start_arrow" } else { "draw_end_arrow" })
+                        .selected_text(cur_label)
+                        .width(ui.available_width() - 8.0)
+                        .show_ui(ui, |ui| {
+                            egui::ScrollArea::vertical().max_height(280.0).id_salt(if start { "draw_start_arrow_menu" } else { "draw_end_arrow_menu" }).show(ui, |ui| {
+                                for (label, val, f) in style::ARROW_MENU {
+                                    let fill_v = f.unwrap_or(start); // Circle: start filled, end open
+                                    let sel = val == kind.as_str() && fill_v == want_fill;
+                                    if ui.selectable_label(sel, label).clicked() && !sel {
+                                        self.apply_style(move |s| {
+                                            *s = style::set(s, if start { "startArrow" } else { "endArrow" }, val);
+                                            *s = style::set(s, fill_key, if fill_v { "1" } else { "0" });
+                                        });
+                                    }
+                                }
+                            });
+                        });
+                });
             }
+
+            // ── Size start / Size end ──
+            ui.horizontal(|ui| {
+                let (mut ss, mut es) = {
+                    let c = self.page().cell(&self.selected[0]);
+                    (c.map(|c| c.start_size()).unwrap_or(6.0), c.map(|c| c.end_size()).unwrap_or(6.0))
+                };
+                ui.label(egui::RichText::new("Size").small().color(DIM));
+                ui.add(egui::DragValue::new(&mut ss).range(1.0..=40.0).speed(0.5).prefix("s:"));
+                ui.add(egui::DragValue::new(&mut es).range(1.0..=40.0).speed(0.5).prefix("e:"));
+                if (ss - style::get_f32(&cur_style, "startSize", 6.0)).abs() > f32::EPSILON {
+                    self.apply_style(|s| *s = style::set(s, "startSize", &format!("{ss}")));
+                }
+                if (es - style::get_f32(&cur_style, "endSize", 6.0)).abs() > f32::EPSILON {
+                    self.apply_style(|s| *s = style::set(s, "endSize", &format!("{es}")));
+                }
+            });
+
+            // ── Offset start / end (perimeter spacing) ──
+            ui.horizontal(|ui| {
+                let (mut so, mut to) = (
+                    style::perimeter_spacing(&cur_style, true),
+                    style::perimeter_spacing(&cur_style, false),
+                );
+                ui.label(egui::RichText::new("Offset").small().color(DIM));
+                ui.add(egui::DragValue::new(&mut so).range(0.0..=50.0).speed(0.5).prefix("s:"));
+                ui.add(egui::DragValue::new(&mut to).range(0.0..=50.0).speed(0.5).prefix("e:"));
+                if (so - style::perimeter_spacing(&cur_style, true)).abs() > f32::EPSILON {
+                    self.apply_style(|s| *s = style::set(s, "sourcePerimeterSpacing", &format!("{so}")));
+                }
+                if (to - style::perimeter_spacing(&cur_style, false)).abs() > f32::EPSILON {
+                    self.apply_style(|s| *s = style::set(s, "targetPerimeterSpacing", &format!("{to}")));
+                }
+            });
+
+            // ── Line jumps (none/arc/gap/sharp/line + size) ──
+            ui.horizontal(|ui| {
+                let js = style::jump_style(&cur_style);
+                let label = match js {
+                    crate::model::JumpStyle::None => "none",
+                    crate::model::JumpStyle::Arc => "arc",
+                    crate::model::JumpStyle::Gap => "gap",
+                    crate::model::JumpStyle::Sharp => "sharp",
+                    crate::model::JumpStyle::Line => "line",
+                };
+                ui.label(egui::RichText::new("Jumps").small().color(DIM));
+                egui::ComboBox::from_id_salt("draw_jump_style").selected_text(label).width(72.0).show_ui(ui, |ui| {
+                    for (name, v) in [
+                        ("none", crate::model::JumpStyle::None),
+                        ("arc", crate::model::JumpStyle::Arc),
+                        ("gap", crate::model::JumpStyle::Gap),
+                        ("sharp", crate::model::JumpStyle::Sharp),
+                        ("line", crate::model::JumpStyle::Line),
+                    ] {
+                        if ui.selectable_label(js == v, name).clicked() && js != v {
+                            self.apply_style(|s| *s = style::set(s, "jumpStyle", v.as_str()));
+                        }
+                    }
+                });
+                let mut jsize = style::get_f32(&cur_style, "jumpSize", 6.0);
+                if ui.add(egui::DragValue::new(&mut jsize).range(1.0..=30.0).speed(0.25).prefix("size ")).changed() {
+                    self.apply_style(|s| *s = style::set(s, "jumpSize", &format!("{jsize}")));
+                }
+            });
         } else {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
@@ -1786,6 +2053,47 @@ impl DrawApp {
                     }
                 });
             self.keys_open = kopen;
+        }
+
+        // ── Export As (options + one-click actions) ──
+        let mut eopen = self.export_open;
+        if eopen {
+            egui::Window::new("Export As")
+                .open(&mut eopen)
+                .collapsible(false)
+                .default_width(320.0)
+                .show(ctx, |ui| {
+                    ui.label(egui::RichText::new("OPTIONS").size(CAPTION).strong().color(DIM));
+                    ui.horizontal(|ui| {
+                        ui.label("Zoom");
+                        ui.add(egui::DragValue::new(&mut self.export_zoom).range(0.25..=4.0).speed(0.05).suffix("×"));
+                        ui.label("Border");
+                        ui.add(egui::DragValue::new(&mut self.export_border).range(0.0..=200.0).speed(1.0).suffix("pt"));
+                    });
+                    ui.checkbox(&mut self.export_transparent, "Transparent background (PNG / SVG)");
+                    ui.checkbox(&mut self.export_crop, "Crop to content");
+                    ui.separator();
+                    ui.label(egui::RichText::new("FORMAT").size(CAPTION).strong().color(DIM));
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.button("XML (.drawio)").clicked() {
+                            self.export_drawio();
+                        }
+                        if ui.button("SVG (.svg)").clicked() {
+                            self.export_svg();
+                        }
+                    });
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.button("PNG (.png)").clicked() {
+                            self.export_png();
+                        }
+                        if ui.button("PDF (.pdf)").clicked() {
+                            self.export_pdf();
+                        }
+                    });
+                    ui.add_space(2.0);
+                    ui.label(egui::RichText::new("Files are written next to the source name in the temp directory.").weak().small());
+                });
+            self.export_open = eopen;
         }
     }
 }

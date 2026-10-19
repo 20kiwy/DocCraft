@@ -21,3 +21,12 @@ Notes
   complete** (they say so themselves); embedding them gives DocCraft exactly
   the same capability set as each upstream at the pinned commit.
 - `git submodule status` re-prints the pinned SHAs at any time.
+
+## 3.2 additions
+| system | version | source | readiness |
+|---|---|---|---|
+| Vector craft (Illustrator-style) | 3.2.0 | doccraft 2.5 port, egui 0.36 | native, full tool set |
+| Notes craft | 3.2.0 | new | native notebook |
+| craft-launcher (ArtCraft Launcher) | 0.5.1 | github.com/storytold/craft-launcher | UI/theme/motion reference — copied into the DocCraft shell |
+| drawio JS (jgraph/drawio v32.5.5 + mxGraph) | — | github.com/jgraph/drawio | connection/arrow/export spec extracted → DRAWIO-SPEC.md → implemented natively |
+| Windows target | — | cargo-xwin cross-build | DocCraft.exe x64 + installer + 27 file associations |

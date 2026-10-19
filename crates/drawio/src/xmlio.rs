@@ -163,107 +163,9 @@ fn parent_shift(d: &Diagram, id: &str) -> (f32, f32) {
     (dx, dy)
 }
 
+/// XML attribute escaping (kept from the SVG writer era; used by write_*).
 fn esc(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
-}
-
-// ── SVG export (File › Export .svg) ─────────────────────────────────────────
-
-/// Export one page as a plain SVG. Shape geometry is approximated with SVG
-/// primitives (rect/ellipse/polygon/path); edge ends keep arrow markers.
-pub fn write_svg(d: &Diagram) -> String {
-    let (w, h) = (d.page_w.max(1.0), d.page_h.max(1.0));
-    let bg = d.background.as_deref().and_then(|b| if b == "none" { None } else { Some(b.to_string()) });
-    let mut s = format!(
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w}\" height=\"{h}\" viewBox=\"0 0 {w} {h}\">\n\
-         <defs><marker id=\"a\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\">\
-         <path d=\"M 0 0 L 10 5 L 0 10 z\" fill=\"context-stroke\"/></marker></defs>\n"
-    );
-    s.push_str(&match &bg {
-        Some(c) => format!("<rect width=\"{w}\" height=\"{h}\" fill=\"{c}\"/>\n"),
-        None => String::new(),
-    });
-    let vcol = |c: &Cell, k: &str, dflt: &str| crate::style::get(&c.style, k).unwrap_or(dflt).to_string();
-    // edges first (like the canvas), then vertices in paint order
-    for c in d.cells.iter().filter(|c| c.edge && d.layer_visible(c)) {
-        let Some((_, _, pts)) = edge_svg_points(d, c) else { continue };
-        let col = vcol(c, "strokeColor", "#000000");
-        let sw = crate::style::get_f32(&c.style, "strokeWidth", 1.0);
-        let dash = if crate::style::get_bool(&c.style, "dashed", false) { " stroke-dasharray=\"6 4\"" } else { "" };
-        let path = pts.iter().map(|(x, y)| format!("{x:.1},{y:.1}")).collect::<Vec<_>>().join(" ");
-        let marker = if crate::style::get(&c.style, "endArrow").map(|v| v != "none").unwrap_or(true) {
-            " marker-end=\"url(#a)\""
-        } else {
-            ""
-        };
-        s.push_str(&format!("<polyline points=\"{path}\" fill=\"none\" stroke=\"{col}\" stroke-width=\"{sw}\"{dash}{marker}/>\n"));
-    }
-    for c in d.cells.iter().filter(|c| c.vertex && d.layer_visible(c)) {
-        let fill = vcol(c, "fillColor", "#ffffff");
-        let fill = if fill == "none" { "none".to_string() } else { fill };
-        let stroke = vcol(c, "strokeColor", "#000000");
-        let sw = crate::style::get_f32(&c.style, "strokeWidth", 1.0);
-        let dash = if crate::style::get_bool(&c.style, "dashed", false) { " stroke-dasharray=\"6 4\"" } else { "" };
-        let g = &c.geom;
-        let common = format!("fill=\"{fill}\" stroke=\"{stroke}\" stroke-width=\"{sw}\"{dash}");
-        let shape = crate::style::get(&c.style, "shape").unwrap_or("");
-        let el = if shape == "umlActor" {
-            String::new() // stick figure: approximate with a plain rect frame
-        } else if c.style.contains("ellipse") && shape.is_empty() || shape == "doubleEllipse" {
-            format!("<ellipse cx=\"{:.1}\" cy=\"{:.1}\" rx=\"{:.1}\" ry=\"{:.1}\" {common}/>", g.x + g.w / 2.0, g.y + g.h / 2.0, g.w / 2.0, g.h / 2.0)
-        } else if c.style.contains("rhombus") {
-            format!(
-                "<polygon points=\"{:.1},{:.1} {:.1},{:.1} {:.1},{:.1} {:.1},{:.1}\" {common}/>",
-                g.x + g.w / 2.0, g.y, g.x + g.w, g.y + g.h / 2.0, g.x + g.w / 2.0, g.y + g.h, g.x, g.y + g.h / 2.0
-            )
-        } else if c.style.contains("triangle") {
-            format!("<polygon points=\"{:.1},{:.1} {:.1},{:.1} {:.1},{:.1}\" {common}/>", g.x + g.w / 2.0, g.y, g.x + g.w, g.y + g.h, g.x, g.y + g.h)
-        } else {
-            let rx = if crate::style::get_bool(&c.style, "rounded", false) { 10 } else { 0 };
-            format!("<rect x=\"{:.1}\" y=\"{:.1}\" width=\"{:.1}\" height=\"{:.1}\" rx=\"{rx}\" {common}/>", g.x, g.y, g.w, g.h)
-        };
-        if !el.is_empty() {
-            s.push_str(&el);
-            s.push('\n');
-        }
-        if !c.value.is_empty() {
-            let fc = vcol(c, "fontColor", "#000000");
-            let fs = crate::style::get_f32(&c.style, "fontSize", 12.0);
-            let weight = if crate::style::font_style(&c.style) & 1 != 0 { " font-weight=\"bold\"" } else { "" };
-            s.push_str(&format!(
-                "<text x=\"{:.1}\" y=\"{:.1}\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-family=\"Helvetica\" font-size=\"{fs}\"{weight} fill=\"{fc}\">{}</text>\n",
-                g.x + g.w / 2.0,
-                g.y + g.h / 2.0,
-                esc(&c.value)
-            ));
-        }
-    }
-    s.push_str("</svg>\n");
-    s
-}
-
-/// First and last routing point of an edge (world coords), if computable.
-fn edge_ends(d: &Diagram, c: &Cell) -> (Option<(f32, f32)>, Option<(f32, f32)>) {
-    let src = c.source.as_deref().and_then(|id| d.cell(id)).map(|v| (v.geom.x + v.geom.w / 2.0, v.geom.y + v.geom.h / 2.0));
-    let tgt = c.target.as_deref().and_then(|id| d.cell(id)).map(|v| (v.geom.x + v.geom.w / 2.0, v.geom.y + v.geom.h / 2.0));
-    (src.or(c.geom.source_pt), tgt.or(c.geom.target_pt))
-}
-
-/// Waypoint list including endpoints (world), or `None` without both ends.
-fn edge_svg_points(d: &Diagram, c: &Cell) -> Option<(f32, f32, Vec<(f32, f32)>)> {
-    let (src, tgt) = edge_ends(d, c);
-    let mut pts = Vec::new();
-    if let Some(p) = src {
-        pts.push(p);
-    }
-    pts.extend(c.geom.points.iter().copied());
-    if let Some(p) = tgt {
-        pts.push(p);
-    }
-    if pts.len() < 2 {
-        return None;
-    }
-    Some((pts[0].0, pts[0].1, pts))
 }
 
 /// Serialize one page to a standalone string (Extras › Edit Diagram…).
@@ -329,12 +231,18 @@ pub fn write_diagram(out: &mut String, d: &Diagram) {
             "1".to_string()
         };
         attrs.push_str(&format!(" parent=\"{}\"", esc(&parent)));
-        if let (Some(s), Some(t)) = (&c.source, &c.target) {
-            attrs.push_str(&format!(" edge=\"1\" source=\"{}\" target=\"{}\"", esc(s), esc(t)));
+        if c.edge {
+            attrs.push_str(" edge=\"1\"");
+            // source/target are written independently — an edge may have only
+            // one linked end (the other dangles at a source/targetPoint)
+            if let Some(s) = &c.source {
+                attrs.push_str(&format!(" source=\"{}\"", esc(s)));
+            }
+            if let Some(t) = &c.target {
+                attrs.push_str(&format!(" target=\"{}\"", esc(t)));
+            }
         } else if c.vertex {
             attrs.push_str(" vertex=\"1\"");
-        } else if c.edge {
-            attrs.push_str(" edge=\"1\"");
         }
         if c.vertex || c.edge {
             out.push_str(&format!("        <mxCell {attrs}>\n"));

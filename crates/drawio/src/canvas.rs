@@ -6,7 +6,8 @@
 //! State lives on [`crate::ui::DrawApp`]; this module is the engine that
 //! reads and mutates it every frame.
 
-use crate::model::{Cell, Diagram};
+use crate::connection::{self, ConnectState};
+use crate::model::{ArrowKind, Cell, Diagram};
 use crate::shapes::{self, Xf};
 use crate::style::{self, Look};
 use crate::ui::{Drag, DrawApp, Tool};
@@ -19,6 +20,10 @@ const GRID_MINOR: Color32 = Color32::from_rgb(0x27, 0x27, 0x2d);
 const GRID_MAJOR: Color32 = Color32::from_rgb(0x30, 0x30, 0x38);
 const HANDLE_FILL: Color32 = Color32::from_rgb(0xff, 0xff, 0xff);
 pub const HANDLE: f32 = 7.0;
+// drawio connection colors (spec §1 — three different "blues/greens")
+pub const CONNECT_BLUE: Color32 = Color32::from_rgb(0x29, 0xb6, 0xf2); // hover arrows, × markers, endpoint handles
+pub const TARGET_BLUE: Color32 = Color32::from_rgb(0x00, 0xa8, 0xff); // valid drop-target highlight
+const SNAP_GREEN: Color32 = Color32::from_rgb(0x00, 0xff, 0x00); // fixed-point snap ring
 
 // ── mapping ──────────────────────────────────────────────────────────────────
 
@@ -65,14 +70,14 @@ pub fn show(app: &mut DrawApp, ui: &mut Ui) {
     let w2s = move |p: Pos2| to_screen(pan, zoom, rect.min, p);
     let s2w = move |p: Pos2| to_world(pan, zoom, rect.min, p);
 
-    // ── routes (screen space) for every visible edge ──
-    let page = app.page();
+    // ── routes (screen space) for every visible edge, via the connection engine ──
+    let page = app.page().clone();
     let routes: Vec<(String, style::EdgeRoute, Vec<Pos2>)> = page
         .cells
         .iter()
         .filter(|c| c.edge && page.layer_visible(c))
         .map(|c| {
-            let world = route_points(page, c);
+            let world = connection::route_points(&page, c);
             (c.id.clone(), style::edge_route(&c.style), world.iter().map(|p| w2s(*p)).collect())
         })
         .collect();
@@ -81,7 +86,7 @@ pub fn show(app: &mut DrawApp, ui: &mut Ui) {
     let sel = app.selected.clone();
     let mut labels: Vec<(String, Pos2, f32)> = Vec::new(); // edge labels (id, screen midpoint, size)
     {
-        let page = app.page();
+        let page = app.page().clone();
         for c in &page.cells {
             if !page.layer_visible(c) {
                 continue;
@@ -170,11 +175,12 @@ pub fn show(app: &mut DrawApp, ui: &mut Ui) {
         let r = Rect::from_min_size(w2s(Pos2::new(bx, by)), Vec2::new(bw * zoom, bh * zoom));
         painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(1.0, ACCENT.linear_multiply(0.8)), StrokeKind::Outside);
     }
-    // single selected edge: waypoint handles
+    // single selected edge: waypoint handles + endpoint handles
     if let Some(id) = sel.first().cloned()
         && let Some(c) = app.page().cell(&id)
         && c.edge
         && let Some((_, _, pts)) = routes.iter().find(|(rid, _, _)| rid == &id)
+        && pts.len() >= 2
     {
         for (i, w) in c.geom.points.iter().enumerate() {
             let p = w2s(Pos2::from(*w));
@@ -183,37 +189,44 @@ pub fn show(app: &mut DrawApp, ui: &mut Ui) {
             painter.rect_stroke(r, CornerRadius::same(1), Stroke::new(1.0, ACCENT), StrokeKind::Outside);
             let _ = i;
         }
-    }
-
-    // hover connection arrows (drawio-style) for a single selected vertex
-    if app.tool == Tool::Select && app.drag == Drag::None && sel.len() == 1 && app.edge_from.is_none() && app.edit_label.is_none() {
-        let sel_rect = sel
-            .first()
-            .and_then(|id| app.page().cell(id))
-            .filter(|c| c.vertex)
-            .map(|c| (c.id.clone(), Rect::from_min_size(w2s(Pos2::new(c.geom.x, c.geom.y)), Vec2::new(c.geom.w * zoom, c.geom.h * zoom))));
-        if let Some((id, r)) = sel_rect {
-            for (dx, dy) in [(-1.0, 0.0), (1.0, 0.0), (0.0, -1.0), (0.0, 1.0)] {
-                let dir = Vec2::new(dx, dy);
-                let center = Pos2::new(r.center().x + dir.x * (r.width() / 2.0 + 13.0), r.center().y + dir.y * (r.height() / 2.0 + 13.0));
-                let ar = Rect::from_center_size(center, Vec2::splat(15.0));
-                if !rect.contains(center) {
-                    continue;
+        // endpoint handles: r=6 #29b6f2 with white stroke; × inside when the
+        // end is pinned to a fixed connection point (spec §5)
+        let dragging_this = matches!(
+            app.connect,
+            ConnectState::EndpointDrag { ref edge, .. } if *edge == id
+        );
+        if !dragging_this && app.edit_label.is_none() {
+            let ends = [
+                (true, *pts.first().unwrap(), c.exit().is_some()),
+                (false, *pts.last().unwrap(), c.entry().is_some()),
+            ];
+            for (is_source, sp, pinned) in ends {
+                let er = Rect::from_center_size(sp, Vec2::splat(12.0));
+                let hresp = ui.allocate_rect(er, Sense::click_and_drag());
+                let hot = hresp.hovered() || hresp.dragged();
+                painter.circle_filled(sp, 6.0, CONNECT_BLUE);
+                painter.circle_stroke(sp, 6.0, Stroke::new(1.5, HANDLE_FILL));
+                if pinned {
+                    paint_cross(&painter, sp, 3.0, HANDLE_FILL, Stroke::new(1.2, HANDLE_FILL));
                 }
-                let hresp = ui.allocate_rect(ar, Sense::click_and_drag());
-                let hov = hresp.hovered();
-                painter.circle_filled(center, 7.0, if hov { ACCENT } else { ACCENT.linear_multiply(0.85) });
-                arrow_glyph(&painter, center, dir, HANDLE_FILL, 0.8, false);
+                if hot {
+                    painter.circle_stroke(sp, 9.0, Stroke::new(1.0, CONNECT_BLUE.linear_multiply(0.6)));
+                }
                 if hresp.drag_started() {
                     app.push_undo();
-                    app.drag = Drag::Edge { src: id.clone(), cur: s2w(ui.input(|i| i.pointer.latest_pos()).unwrap_or(center)) };
-                } else if hresp.clicked() {
-                    app.edge_from = Some(id.clone());
-                    app.status = "Connect: click the target shape (Esc to cancel)".into();
+                    let cur = s2w(ui.input(|i| i.pointer.latest_pos()).unwrap_or(sp));
+                    app.connect = ConnectState::EndpointDrag { edge: id.clone(), is_source, cur, snapped: None };
+                    app.status = "Drag to re-link · drop on empty to dangle · Esc to cancel".into();
                 }
             }
         }
     }
+
+    // ── connection overlays: preview edge, × markers, snap ring, highlights ──
+    connect_overlay(app, ui, rect, &painter, &w2s, &s2w);
+
+    // ── hover connection arrows (drawio HoverIcons) ──
+    hover_arrows(app, ui, rect, &painter, &w2s, &s2w);
 
     // ── overlays: guides, rubber band, edge preview ──
     for g in &app.guides {
@@ -232,22 +245,6 @@ pub fn show(app: &mut DrawApp, ui: &mut Ui) {
         let r = Rect::from_two_pos(a, b);
         painter.rect_filled(r, CornerRadius::ZERO, ACCENT.linear_multiply(0.10));
         painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(1.0, ACCENT), StrokeKind::Inside);
-    }
-    if let Drag::Edge { src, cur } = app.drag.clone() {
-        let page = app.page();
-        if let Some(c) = page.cell(&src) {
-            let a = w2s(anchor(page, c, cur));
-            let b = w2s(cur);
-            painter.line_segment([a, b], Stroke::new(1.6, ACCENT));
-            arrow_glyph(&painter, b, (b - a).normalized(), ACCENT, 0.9, true);
-            // highlight potential target
-            if let Some(t) = pick_vertex(app.page(), cur, false)
-                && t.id != src
-            {
-                let tr = Rect::from_min_size(w2s(Pos2::new(t.geom.x, t.geom.y)), Vec2::new(t.geom.w * zoom, t.geom.h * zoom));
-                painter.rect_stroke(tr, CornerRadius::same(2), Stroke::new(2.0, ACCENT), StrokeKind::Outside);
-            }
-        }
     }
 
     // ── inline label editor ──
@@ -472,9 +469,6 @@ fn canvas_input(
                     }
                 });
             }
-            Drag::Edge { src, .. } => {
-                app.drag = Drag::Edge { src, cur: world };
-            }
             Drag::Rubber { start, .. } => {
                 app.drag = Drag::Rubber { start, cur: world };
             }
@@ -487,28 +481,6 @@ fn canvas_input(
                 app.guides.clear();
                 app.drag = Drag::None;
                 let _ = moved;
-            }
-            Drag::Edge { src, cur } => {
-                app.drag = Drag::None;
-                let target = pick_vertex(app.page(), cur, false).map(|c| c.id.clone()).filter(|id| id.as_str() != src);
-                let estyle = "edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;";
-                let id = match target {
-                    Some(t) => app.edit_page(|page| page.add_edge(estyle, Some(src), Some(t))).unwrap_or_default(),
-                    None => {
-                        let id = app.edit_page(|page| page.add_edge(estyle, Some(src), None)).unwrap_or_default();
-                        app.edit_page(|page| {
-                            if let Some(c) = page.cell_mut(&id) {
-                                c.geom.source_pt = None;
-                                c.geom.target_pt = Some((cur.x, cur.y));
-                            }
-                        });
-                        id
-                    }
-                };
-                if !id.is_empty() {
-                    app.selected = vec![id];
-                }
-                app.status = "Connected".into();
             }
             Drag::Rubber { start, cur } => {
                 let r = Rect::from_two_pos(start, cur);
@@ -537,8 +509,9 @@ fn canvas_input(
                     .map(|c| c.id.clone());
                 if let (Some(from), Some(target)) = (app.edge_from.clone(), target) {
                     app.push_undo();
-                    let estyle = "edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;";
-                    let id = app.edit_page(|page| page.add_edge(estyle, Some(from), Some(target))).unwrap_or_default();
+                    let id = app
+                        .edit_page(|page| page.add_edge(crate::model::DEFAULT_EDGE_STYLE, Some(from), Some(target)))
+                        .unwrap_or_default();
                     app.edge_from = None;
                     app.selected = vec![id];
                     app.tool = Tool::Select;
@@ -554,6 +527,35 @@ fn canvas_input(
             }
         }
     }
+
+    // ── connection drags: follow the cursor, snap, commit on release ──
+    if app.connect.active() {
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            app.connect = ConnectState::Idle;
+            app.status = "Connection cancelled".into();
+        } else {
+            let world = ui.input(|i| i.pointer.latest_pos()).map(|pp| s2w(pp));
+            let tol = 4.0 / app.zoom.max(0.2);
+            if let Some(world) = world {
+                let snap = connection::find_snap(app.page(), world, tol, None);
+                match &mut app.connect {
+                    ConnectState::Connecting { cur, snapped, .. } => {
+                        *cur = world;
+                        *snapped = snap;
+                    }
+                    ConnectState::EndpointDrag { cur, snapped, .. } => {
+                        *cur = world;
+                        *snapped = snap;
+                    }
+                    _ => {}
+                }
+            }
+            if ui.input(|i| i.pointer.any_released()) {
+                commit_connect(app);
+            }
+        }
+    }
+
     // double click: label editing / waypoint add / new text
     if resp.double_clicked() {
         let Some(p) = resp.interact_pointer_pos() else { return };
@@ -655,7 +657,7 @@ fn context_menu(app: &mut DrawApp, ui: &mut Ui, _rect: Rect) {
                     b.clicked()
                 };
                 let has_cell = menu.cell.is_some();
-                let page = app.page();
+                let page = app.page().clone();
                 let locked = menu.cell.as_deref().and_then(|id| page.cell(id)).map(|c| page.layer_locked(c)).unwrap_or(false);
                 if item(ui, "✏ Edit Label", has_cell && !locked) {
                     action = Some(CtxAction::EditLabel);
@@ -780,7 +782,7 @@ fn nearest_segment(points: &[(f32, f32)], world: Pos2) -> usize {
 // ── moving + guides ──────────────────────────────────────────────────────────
 
 fn positions(app: &DrawApp, ids: &[String]) -> Vec<(String, f32, f32)> {
-    let page = app.page();
+    let page = app.page().clone();
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for id in ids {
@@ -851,87 +853,323 @@ fn align_guides(page: &Diagram, moving: &[String], bbox: (f32, f32, f32, f32), t
     (dx, dy, guides)
 }
 
-// ── edge routing ─────────────────────────────────────────────────────────────
+// ── connection UX (hover arrows, overlays, commit) ──────────────────────────
 
-fn anchor(page: &Diagram, cell: &Cell, toward: Pos2) -> Pos2 {
-    let r = Rect::from_min_size(Pos2::new(cell.geom.x, cell.geom.y), Vec2::new(cell.geom.w, cell.geom.h));
-    shapes::anchor_on_rect(r, toward)
-}
-
-fn endpoint(page: &Diagram, id: &Option<String>, pt: &Option<(f32, f32)>, toward: Pos2) -> Option<Pos2> {
-    if let Some(id) = id
-        && let Some(c) = page.cell(id)
-        && c.vertex
-    {
-        return Some(anchor(page, c, toward));
-    }
-    pt.map(Pos2::from)
-}
-
-/// World-space routing points for one edge.
-pub fn route_points(page: &Diagram, cell: &Cell) -> Vec<Pos2> {
-    let center = |id: &Option<String>, fallback: &Option<(f32, f32)>| -> Option<Pos2> {
-        id.as_deref()
-            .and_then(|id| page.cell(id))
-            .map(|c| Pos2::new(c.geom.x + c.geom.w / 2.0, c.geom.y + c.geom.h / 2.0))
-            .or_else(|| fallback.map(Pos2::from))
-    };
-    let a_center = center(&cell.source, &cell.geom.source_pt);
-    let b_center = center(&cell.target, &cell.geom.target_pt);
-    let (Some(ac), Some(bc)) = (a_center, b_center) else { return Vec::new() };
-    let a = endpoint(page, &cell.source, &cell.geom.source_pt, bc).unwrap_or(ac);
-    let b = endpoint(page, &cell.target, &cell.geom.target_pt, ac).unwrap_or(bc);
-    let wps: Vec<Pos2> = cell.geom.points.iter().map(|w| Pos2::from(*w)).collect();
-    match route_kind(&cell.style) {
-        style::EdgeRoute::Straight | style::EdgeRoute::Curved => {
-            let mut pts = vec![a];
-            pts.extend(wps);
-            pts.push(b);
-            pts
-        }
-        style::EdgeRoute::Orthogonal => {
-            let mut pts = vec![a];
-            let mut cur = a;
-            for w in wps {
-                pts.extend(elbow(cur, w));
-                pts.push(w);
-                cur = w;
-            }
-            pts.extend(elbow(cur, b));
-            pts.push(b);
-            pts
-        }
-    }
-}
-
-fn route_kind(st: &str) -> style::EdgeRoute {
-    match style::get(st, "edgeStyle") {
-        Some("straightEdgeStyle") | Some("none") => style::EdgeRoute::Straight,
-        Some("orthogonalEdgeStyle") | Some("elbowEdgeStyle") => {
-            if style::get_bool(st, "curved", false) {
-                style::EdgeRoute::Curved
-            } else {
-                style::EdgeRoute::Orthogonal
-            }
-        }
-        _ => {
-            if style::get_bool(st, "curved", false) {
-                style::EdgeRoute::Curved
-            } else {
-                style::EdgeRoute::Orthogonal
-            }
-        }
-    }
-}
-
-fn elbow(p: Pos2, q: Pos2) -> Vec<Pos2> {
-    if (p.x - q.x).abs() < 0.5 || (p.y - q.y).abs() < 0.5 {
-        Vec::new()
-    } else if (q.x - p.x).abs() >= (q.y - p.y).abs() {
-        vec![Pos2::new(q.x, p.y)]
+fn fmt_num(v: f32) -> String {
+    if (v - v.round()).abs() < 1e-4 {
+        format!("{}", v.round() as i32)
     } else {
-        vec![Pos2::new(p.x, q.y)]
+        format!("{v:.3}")
     }
+}
+
+/// 5px "×" cross with an optional halo (fixed-point markers).
+fn paint_cross(p: &egui::Painter, c: Pos2, half: f32, color: Color32, stroke: Stroke) {
+    p.line_segment([Pos2::new(c.x - half, c.y - half), Pos2::new(c.x + half, c.y + half)], stroke);
+    p.line_segment([Pos2::new(c.x - half, c.y + half), Pos2::new(c.x + half, c.y - half)], stroke);
+    let _ = color;
+}
+
+/// Track the hovered vertex and draw the 4 drawio hover arrows (#29b6f2
+/// triangles just outside the bounds, after ~140ms hover, or immediately for
+/// the single selected shape). Drag from one starts a connection; click
+/// creates a new rectangle connected in that direction.
+fn hover_arrows(
+    app: &mut DrawApp,
+    ui: &mut Ui,
+    rect: Rect,
+    painter: &egui::Painter,
+    w2s: &impl Fn(Pos2) -> Pos2,
+    s2w: &impl Fn(Pos2) -> Pos2,
+) {
+    if app.tool != Tool::Select || app.edit_label.is_some() || app.drag != Drag::None || app.connect.active() || !app.ctx_menu.is_none() {
+        return;
+    }
+    let page = app.page().clone();
+    let ptr = ui.input(|i| i.pointer.latest_pos());
+    let hov_id = ptr.and_then(|p| pick_vertex(&page, s2w(p), false)).map(|c| c.id.clone());
+    // keep hover alive while the pointer is on the arrows themselves
+    let keep = match (&app.hover, ptr) {
+        (Some((id, _)), Some(p)) => page.cell(id).map(|c| c.rect().expand(24.0).contains(s2w(p))).unwrap_or(false),
+        _ => false,
+    };
+    // wall-clock hover timing (robust when the app repaints only on input)
+    let now = ui.input(|i| i.time) as f32;
+    match (&app.hover, &hov_id) {
+        (Some((id, t0)), Some(h)) if id == h => app.hover = Some((id.clone(), *t0)),
+        (_, Some(h)) => app.hover = Some((h.clone(), now)),
+        _ if keep => {}
+        _ => app.hover = None,
+    }
+    if app.hover.is_some() {
+        ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));
+    }
+    // the shape showing arrows: hovered (after 140ms) or the single selection
+    let mut target = match &app.hover {
+        Some((id, t0)) if now - *t0 >= 0.14 => Some(id.clone()),
+        _ => None,
+    };
+    if target.is_none() && app.selected.len() == 1 && page.cell(&app.selected[0]).map(|c| c.vertex).unwrap_or(false) {
+        target = app.selected.first().cloned();
+    }
+    let Some(tid) = target else { return };
+    let Some(cell) = page.cell(&tid).cloned() else { return };
+    if page.layer_locked(&cell) || !page.layer_visible(&cell) {
+        return;
+    }
+    let r = Rect::from_min_size(w2s(Pos2::new(cell.geom.x, cell.geom.y)), Vec2::new(cell.geom.w * app.zoom, cell.geom.h * app.zoom));
+    let tri = 10.0f32;
+    let gap = 2.0f32;
+    for (dx, dy) in [(-1.0f32, 0.0), (1.0, 0.0), (0.0, -1.0), (0.0, 1.0)] {
+        let dir = Vec2::new(dx, dy);
+        let center = if dx != 0.0 {
+            Pos2::new(if dx > 0.0 { r.right() + gap + tri / 2.0 } else { r.left() - gap - tri / 2.0 }, r.center().y)
+        } else {
+            Pos2::new(r.center().x, if dy > 0.0 { r.bottom() + gap + tri / 2.0 } else { r.top() - gap - tri / 2.0 })
+        };
+        if !rect.contains(center) {
+            continue;
+        }
+        // arrows must not overlap other cells
+        let ar = Rect::from_center_size(center, Vec2::splat(tri + 4.0));
+        let overlapped = page.cells.iter().any(|o| {
+            o.vertex
+                && o.id != cell.id
+                && page.layer_visible(o)
+                && ar.intersects(Rect::from_min_size(
+                    w2s(Pos2::new(o.geom.x, o.geom.y)),
+                    Vec2::new(o.geom.w * app.zoom, o.geom.h * app.zoom),
+                ))
+        });
+        if overlapped {
+            continue;
+        }
+        let hresp = ui.allocate_rect(Rect::from_center_size(center, Vec2::splat(tri + 7.0)), Sense::click_and_drag());
+        let fill = if hresp.hovered() || hresp.dragged() { CONNECT_BLUE } else { CONNECT_BLUE.linear_multiply(0.88) };
+        let side = Vec2::new(-dir.y, dir.x);
+        let tip = center + dir * (tri * 0.55);
+        let b1 = center - dir * (tri * 0.45) + side * (tri * 0.5);
+        let b2 = center - dir * (tri * 0.45) - side * (tri * 0.5);
+        painter.add(Shape::convex_polygon(vec![tip, b1, b2], fill, Stroke::new(1.2, HANDLE_FILL)));
+        let side_n = if dx > 0.0 {
+            (1.0, 0.5)
+        } else if dx < 0.0 {
+            (0.0, 0.5)
+        } else if dy > 0.0 {
+            (0.5, 1.0)
+        } else {
+            (0.5, 0.0)
+        };
+        if hresp.drag_started() {
+            app.push_undo();
+            let cur = ui.input(|i| i.pointer.latest_pos().map(s2w).unwrap_or(center));
+            app.connect = ConnectState::Connecting { source: cell.id.clone(), side: Some(side_n), cur, snapped: None };
+            app.status = "Release on a shape to connect · drop on empty for a dangling end · Esc cancels".into();
+        } else if hresp.clicked() {
+            create_connected_vertex(app, &cell, dir);
+        }
+    }
+}
+
+/// Click on a hover arrow: new default rectangle ~defaultEdgeLength away,
+/// connected to the source with the default edge (exit pinned to that side).
+fn create_connected_vertex(app: &mut DrawApp, src: &Cell, dir: Vec2) {
+    app.push_undo();
+    let (nw, nh) = (120.0f32, 60.0f32);
+    let border = if dir.x != 0.0 { src.geom.w / 2.0 } else { src.geom.h / 2.0 };
+    let gap = 120.0f32; // mxGraph defaultEdgeLength
+    let mut cx = src.geom.x + src.geom.w / 2.0 + dir.x * (border + gap + nw / 2.0);
+    let mut cy = src.geom.y + src.geom.h / 2.0 + dir.y * (border + gap + nh / 2.0);
+    let g = app.grid.max(1.0);
+    cx = (cx / g).round() * g;
+    cy = (cy / g).round() * g;
+    let side = if dir.x > 0.0 {
+        (1.0, 0.5)
+    } else if dir.x < 0.0 {
+        (0.0, 0.5)
+    } else if dir.y > 0.0 {
+        (0.5, 1.0)
+    } else {
+        (0.5, 0.0)
+    };
+    let src_id = src.id.clone();
+    let id = app
+        .edit_page(|page| {
+            let nid = page.add_vertex("", crate::model::DEFAULT_VERTEX_STYLE, cx - nw / 2.0, cy - nh / 2.0, nw, nh);
+            let eid = page.add_edge(crate::model::DEFAULT_EDGE_STYLE, Some(src_id), Some(nid.clone()));
+            if let Some(e) = page.cell_mut(&eid) {
+                e.style = style::set(&e.style, "exitX", &fmt_num(side.0));
+                e.style = style::set(&e.style, "exitY", &fmt_num(side.1));
+            }
+            nid
+        })
+        .unwrap_or_default();
+    app.selected = vec![id];
+    app.status = "Shape added + connected (endArrow=classic)".into();
+}
+
+/// During Connecting / EndpointDrag: preview edge with the REAL edge style,
+/// fixed-point × markers, #00FF00 snap ring and the #00a8ff drop highlight.
+fn connect_overlay(
+    app: &DrawApp,
+    ui: &Ui,
+    rect: Rect,
+    painter: &egui::Painter,
+    w2s: &impl Fn(Pos2) -> Pos2,
+    s2w: &impl Fn(Pos2) -> Pos2,
+) {
+    let _ = (ui, s2w);
+    if !app.connect.active() {
+        return;
+    }
+    let page = app.page().clone();
+    let zoom = app.zoom;
+    let (style, a, b) = match &app.connect {
+        ConnectState::Connecting { source, side, cur, snapped } => {
+            let end = snapped.as_ref().map(|s| s.pos).unwrap_or(*cur);
+            let a = match (*side, page.cell(source)) {
+                (Some((fx, fy)), Some(c)) => {
+                    let r = c.rect();
+                    Pos2::new(r.min.x + fx * r.width(), r.min.y + fy * r.height())
+                }
+                (_, Some(c)) => connection::perimeter(&c.style, c.rect(), end),
+                _ => end,
+            };
+            (crate::model::DEFAULT_EDGE_STYLE.to_string(), a, end)
+        }
+        ConnectState::EndpointDrag { edge, is_source, cur, snapped } => {
+            let Some(ec) = page.cell(edge) else { return };
+            let end = snapped.as_ref().map(|s| s.pos).unwrap_or(*cur);
+            let Some(other) = connection::resolve_endpoint(&page, ec, !*is_source, end) else { return };
+            let style = ec.style.clone();
+            if *is_source {
+                (style, end, other.pos)
+            } else {
+                (style, other.pos, end)
+            }
+        }
+        _ => return,
+    };
+
+    // preview edge in the real current style (dashes stay dashes, no recolor)
+    let pts = connection::preview_route(&style, a, b);
+    if pts.len() >= 2 {
+        let mut look = style::edge_look(&style, zoom);
+        look.stroke = look.stroke.gamma_multiply(0.85);
+        let spts: Vec<Pos2> = pts.iter().map(|p| w2s(*p)).collect();
+        paint_edge(painter, &spts, &style, &look, &[], zoom);
+    }
+
+    // drop-target highlight: #00a8ff outline, width 5, 50% opacity
+    let cur_world = match &app.connect {
+        ConnectState::Connecting { cur, .. } | ConnectState::EndpointDrag { cur, .. } => *cur,
+        _ => Pos2::ZERO,
+    };
+    let hovering = connection::hovering_vertex(&page, cur_world);
+    if let Some(h) = hovering {
+        let Some(hc) = page.cell(&h) else { return };
+        let hr = Rect::from_min_size(
+            w2s(Pos2::new(hc.geom.x, hc.geom.y)),
+            Vec2::new(hc.geom.w * zoom, hc.geom.h * zoom),
+        );
+        painter.rect_stroke(
+            hr,
+            CornerRadius::ZERO,
+            Stroke::new(5.0, TARGET_BLUE.gamma_multiply(0.5)),
+            StrokeKind::Outside,
+        );
+    }
+
+    // fixed-point × markers on connectable shapes under the cursor
+    let tol = 4.0 / zoom.max(0.2);
+    for c in &page.cells {
+        if !c.vertex || !page.layer_visible(c) {
+            continue;
+        }
+        let cr = c.rect().expand(tol * 3.0);
+        if !cr.contains(cur_world) {
+            continue;
+        }
+        for p in connection::fixed_points_world(c) {
+            let sp = w2s(p);
+            if !rect.contains(sp) {
+                continue;
+            }
+            paint_cross(painter, sp, 3.5, HANDLE_FILL, Stroke::new(3.0, HANDLE_FILL.gamma_multiply(0.35)));
+            paint_cross(painter, sp, 2.5, CONNECT_BLUE, Stroke::new(1.6, CONNECT_BLUE));
+        }
+    }
+
+    // snap ring: ~12px #00FF00 filled ellipse at 50% opacity
+    let snap = match &app.connect {
+        ConnectState::Connecting { snapped, .. } | ConnectState::EndpointDrag { snapped, .. } => snapped.clone(),
+        _ => None,
+    };
+    if let Some(s) = snap
+        && s.constraint.is_some()
+    {
+        let sp = w2s(s.pos);
+        painter.circle_filled(sp, 6.0, Color32::from_rgba_unmultiplied(0x00, 0xff, 0x00, 128));
+        painter.circle_stroke(sp, 6.0, Stroke::new(1.2, SNAP_GREEN.gamma_multiply(0.9)));
+    }
+}
+
+/// Commit a connection drag: link / re-link / dangle per the snap state.
+fn commit_connect(app: &mut DrawApp) {
+    match app.connect.clone() {
+        ConnectState::Connecting { source, side, cur, snapped } => {
+            app.push_undo();
+            let hover = connection::hovering_vertex(app.page(), cur);
+            let sid = source.clone();
+            let id = app
+                .edit_page(|page| {
+                    let (target, entry) = match &snapped {
+                        Some(s) => (Some(s.shape.clone()), s.constraint),
+                        None => (hover.clone(), None),
+                    };
+                    let id = page.add_edge(crate::model::DEFAULT_EDGE_STYLE, Some(sid), target.clone());
+                    if let Some(c) = page.cell_mut(&id) {
+                        if let Some((fx, fy)) = side {
+                            c.style = style::set(&c.style, "exitX", &fmt_num(fx));
+                            c.style = style::set(&c.style, "exitY", &fmt_num(fy));
+                        }
+                        if let Some((fx, fy)) = entry {
+                            c.style = style::set(&c.style, "entryX", &fmt_num(fx));
+                            c.style = style::set(&c.style, "entryY", &fmt_num(fy));
+                        }
+                        if target.is_none() {
+                            c.geom.target_pt = Some((cur.x, cur.y));
+                        }
+                    }
+                    id
+                })
+                .unwrap_or_default();
+            if !id.is_empty() {
+                app.selected = vec![id];
+            }
+            app.status = if snapped.map(|s| s.constraint.is_some()).unwrap_or(false) {
+                "Connected at fixed point".into()
+            } else {
+                "Connected".into()
+            };
+        }
+        ConnectState::EndpointDrag { edge, is_source, cur, snapped } => {
+            app.push_undo();
+            let hover = connection::hovering_vertex(app.page(), cur);
+            app.edit_page(|page| {
+                if let Some(c) = page.cell_mut(&edge) {
+                    match (&snapped, &hover) {
+                        (Some(s), _) => c.link(is_source, Some(s.shape.clone()), s.constraint, None),
+                        (None, Some(h)) => c.link(is_source, Some(h.clone()), None, None),
+                        (None, None) => c.link(is_source, None, None, Some((cur.x, cur.y))),
+                    }
+                }
+            });
+            app.status = if snapped.is_some() { "Endpoint re-linked".into() } else { "Endpoint released".into() };
+        }
+        _ => {}
+    }
+    app.connect = ConnectState::Idle;
 }
 
 /// Screen midpoint of an edge path (label anchor).
@@ -1063,20 +1301,37 @@ fn paint_edge(p: &egui::Painter, pts: &[Pos2], st: &str, look: &Look, jumps: &[(
                 }
             }
             paint_polyline(p, &path, &look.stroke_w(), &dash);
-            // arrowheads
-            let end_arrow = style::get(st, "endArrow").unwrap_or("classic");
-            if end_arrow != "none" && path.len() >= 2 {
-                let b = *path.last().unwrap();
-                let prev = path[path.len() - 2];
-                arrow_head(p, b, (b - prev).normalized(), look.stroke, end_arrow, zoom);
-            }
-            if let Some(start_arrow) = style::get(st, "startArrow")
-                && start_arrow != "none"
-                && path.len() >= 2
-            {
-                let a = path[0];
-                arrow_head(p, a, (path[0] - path[1]).normalized(), look.stroke, start_arrow, zoom);
-            }
+            paint_edge_markers(p, st, look, &path, zoom);
+        }
+    }
+}
+
+/// Start/end markers read from the style string (kind, fill flag, size) and
+/// painted with the full ArrowKind geometry.
+fn paint_edge_markers(p: &egui::Painter, st: &str, look: &Look, path: &[Pos2], zoom: f32) {
+    if path.len() < 2 {
+        return;
+    }
+    let sw = look.width;
+    let end = crate::style::get(st, "endArrow").and_then(ArrowKind::from_str).unwrap_or(ArrowKind::Classic);
+    if end != ArrowKind::None {
+        let b = *path.last().unwrap();
+        let prev = path[path.len() - 2];
+        let d0 = b - prev; let dl0 = d0.length(); let dir = if dl0 > 1e-6 { d0 / dl0 } else { Vec2::ZERO };
+        if dir != Vec2::ZERO {
+            let fill = style::get_bool(st, "endFill", true);
+            let size = style::get_f32(st, "endSize", 6.0);
+            paint_marker(p, b, dir, look.stroke, end, fill, size, sw, zoom);
+        }
+    }
+    let start = style::get(st, "startArrow").and_then(ArrowKind::from_str);
+    if let Some(start) = start.filter(|k| *k != ArrowKind::None) {
+        let a = path[0];
+        let d1 = a - path[1]; let dl1 = d1.length(); let dir = if dl1 > 1e-6 { d1 / dl1 } else { Vec2::ZERO };
+        if dir != Vec2::ZERO {
+            let fill = style::get_bool(st, "startFill", true);
+            let size = style::get_f32(st, "startSize", 6.0);
+            paint_marker(p, a, dir, look.stroke, start, fill, size, sw, zoom);
         }
     }
 }
@@ -1085,6 +1340,7 @@ fn paint_edge(p: &egui::Painter, pts: &[Pos2], st: &str, look: &Look, jumps: &[(
 fn paint_curve(p: &egui::Painter, pts: &[Pos2], look: &Look, dash: &[f32], st: &str) {
     if pts.len() < 3 {
         paint_polyline(p, pts, &look.stroke_w(), dash);
+        paint_edge_markers(p, st, look, pts, 1.0);
         return;
     }
     let mut out = Vec::new();
@@ -1105,78 +1361,141 @@ fn paint_curve(p: &egui::Painter, pts: &[Pos2], look: &Look, dash: &[f32], st: &
     }
     out.push(*pts.last().unwrap());
     paint_polyline(p, &out, &look.stroke_w(), dash);
-    let b = *out.last().unwrap();
-    let prev = out[out.len() - 2];
-    let end_arrow = style::get(st, "endArrow").unwrap_or("classic");
-    if end_arrow != "none" {
-        arrow_head(p, b, (b - prev).normalized(), look.stroke, end_arrow, 1.0);
-    }
+    paint_edge_markers(p, st, look, &out, 1.0);
 }
 
-fn arrow_head(p: &egui::Painter, tip: Pos2, dir: Vec2, color: Color32, kind: &str, zoom: f32) {
-    let s = 8.0 * zoom.max(0.5);
+/// Paint one arrow marker of any [`ArrowKind`] at `tip` pointing along `dir`.
+/// `size` is the style's `startSize`/`endSize` (default 6, model units),
+/// `fill` picks filled vs outline geometry, `stroke_w` is the edge width.
+pub fn paint_marker(p: &egui::Painter, tip: Pos2, dir: Vec2, color: Color32, kind: ArrowKind, fill: bool, size: f32, stroke_w: f32, zoom: f32) {
+    let z = zoom.max(0.3);
+    let s = (size * 1.5 + stroke_w * 2.0) * z; // overall length in screen px
+    let sw = (stroke_w * z).max(1.0);
     let side = Vec2::new(-dir.y, dir.x);
     let back = tip - dir * s;
+    let stroke = Stroke::new(sw, color);
+    let poly = |pts: Vec<Pos2>, fill_color: Option<Color32>| {
+        if let Some(fc) = fill_color {
+            p.add(Shape::convex_polygon(pts.clone(), fc, Stroke::NONE));
+        }
+        let mut outline = pts.clone();
+        if let Some(first) = pts.first() {
+            outline.push(*first);
+        }
+        p.add(Shape::line(outline, stroke));
+    };
     match kind {
-        "open" => {
-            p.line_segment([back + side * s * 0.6, tip], Stroke::new(1.4 * zoom.max(0.5), color));
-            p.line_segment([back - side * s * 0.6, tip], Stroke::new(1.4 * zoom.max(0.5), color));
+        ArrowKind::None => {}
+        ArrowKind::Classic | ArrowKind::ClassicThin => {
+            let w = if kind == ArrowKind::Classic { 0.5 } else { 0.3 };
+            poly(vec![tip, back + side * s * w, back - side * s * w], fill.then_some(color));
         }
-        "oval" => {
-            p.circle_filled(tip - dir * s * 0.4, s * 0.4, color);
+        ArrowKind::Block | ArrowKind::BlockThin => {
+            let w = if kind == ArrowKind::Block { 0.55 } else { 0.32 };
+            poly(vec![tip, back + side * s * w, back - side * s * w], fill.then_some(color));
         }
-        "diamond" => {
-            p.add(Shape::convex_polygon(
-                vec![tip, tip - dir * s * 0.55 + side * s * 0.4, tip - dir * s, tip - dir * s * 0.55 - side * s * 0.4],
-                color,
-                Stroke::NONE,
-            ));
+        ArrowKind::Open | ArrowKind::OpenThin => {
+            let w = if kind == ArrowKind::Open { 0.65 } else { 0.45 };
+            let lw = if kind == ArrowKind::Open { sw } else { sw * 0.8 };
+            let st2 = Stroke::new(lw, color);
+            p.line_segment([tip, back + side * s * w], st2);
+            p.line_segment([tip, back - side * s * w], st2);
         }
-        "ERone" => {
-            p.line_segment([tip - dir * s * 0.5 + side * s * 0.5, tip - dir * s * 0.5 - side * s * 0.5], Stroke::new(1.6 * zoom.max(0.5), color));
+        ArrowKind::OpenAsync => {
+            p.line_segment([tip, back + side * s * 0.9], stroke);
+            p.line_segment([tip, back - side * s * 0.5], stroke);
         }
-        "ERmany" => {
-            for f in [-0.6, 0.0, 0.6] {
-                p.line_segment([tip - dir * s * 0.6, tip + side * s * f], Stroke::new(1.4 * zoom.max(0.5), color));
+        ArrowKind::Async => {
+            poly(vec![tip, back + side * s * 0.85, tip - dir * s * 0.55 - side * s * 0.45], fill.then_some(color));
+        }
+        ArrowKind::Oval | ArrowKind::Circle => {
+            let c = tip - dir * s * 0.5;
+            if fill {
+                p.circle_filled(c, s * 0.5, color);
+            } else {
+                p.circle_stroke(c, s * 0.5, stroke);
             }
         }
-        "ERmandOne" => {
+        ArrowKind::Diamond | ArrowKind::DiamondThin => {
+            let w = if kind == ArrowKind::Diamond { 0.4 } else { 0.25 };
+            poly(
+                vec![tip, tip - dir * s * 0.5 + side * s * w, tip - dir * s, tip - dir * s * 0.5 - side * s * w],
+                fill.then_some(color),
+            );
+        }
+        ArrowKind::Box => {
+            poly(
+                vec![tip, tip + side * s * 0.7, back + side * s * 0.7, back - side * s * 0.7, tip - side * s * 0.7],
+                fill.then_some(color),
+            );
+        }
+        ArrowKind::HalfCircle => {
+            let r = s * 0.6;
+            let pts: Vec<Pos2> = (0..=12)
+                .map(|k| {
+                    let th = -std::f32::consts::FRAC_PI_2 + k as f32 / 12.0 * std::f32::consts::PI;
+                    tip + side * (r * th.sin()) - dir * (r * th.cos())
+                })
+                .collect();
+            p.add(Shape::line(pts, stroke));
+        }
+        ArrowKind::Dash => {
+            let bt = tip - dir * s * 0.5;
+            p.line_segment([bt + side * s * 0.6, bt - side * s * 0.6], stroke);
+        }
+        ArrowKind::BaseDash => {
+            let bt = tip - dir * s * 0.2;
+            p.line_segment([bt + side * s * 0.4, bt - side * s * 0.4], stroke);
+        }
+        ArrowKind::Cross => {
+            let c = tip - dir * s * 0.5;
+            p.line_segment([c + side * s * 0.5, c - side * s * 0.5], stroke);
+            p.line_segment([c + dir * s * 0.5, c - dir * s * 0.5], stroke);
+        }
+        ArrowKind::CirclePlus => {
+            let c = tip - dir * s * 0.6;
+            p.circle_stroke(c, s * 0.5, stroke);
+            p.line_segment([c + side * s * 0.3, c - side * s * 0.3], stroke);
+            p.line_segment([c + dir * s * 0.3, c - dir * s * 0.3], stroke);
+        }
+        ArrowKind::ErOne => {
+            let bt = tip - dir * s * 0.5;
+            p.line_segment([bt + side * s * 0.55, bt - side * s * 0.55], stroke);
+        }
+        ArrowKind::ErMandOne => {
             for t in [0.35, 0.65] {
                 let bt = tip - dir * s * t;
-                p.line_segment([bt + side * s * 0.5, bt - side * s * 0.5], Stroke::new(1.6 * zoom.max(0.5), color));
+                p.line_segment([bt + side * s * 0.5, bt - side * s * 0.5], stroke);
             }
         }
-        "ERoneToMany" => {
-            let bt = tip - dir * s * 0.4;
-            p.line_segment([bt + side * s * 0.5, bt - side * s * 0.5], Stroke::new(1.6 * zoom.max(0.5), color));
+        ArrowKind::ErMany => {
             for f in [-0.6, 0.0, 0.6] {
-                p.line_segment([tip - dir * s * 0.2, tip + side * s * f], Stroke::new(1.4 * zoom.max(0.5), color));
+                p.line_segment([tip - dir * s, tip + side * s * f], stroke);
             }
         }
-        "ERzeroToOne" => {
-            p.circle_stroke(tip - dir * s * 0.75, s * 0.22, Stroke::new(1.2 * zoom.max(0.5), color));
-            let bt = tip - dir * s * 0.3;
-            p.line_segment([bt + side * s * 0.5, bt - side * s * 0.5], Stroke::new(1.6 * zoom.max(0.5), color));
+        ArrowKind::ErOneToMany => {
+            let bt = tip - dir * s * 0.75;
+            p.line_segment([bt + side * s * 0.55, bt - side * s * 0.55], stroke);
+            for f in [-0.6, 0.0, 0.6] {
+                p.line_segment([tip - dir * s, tip + side * s * f], stroke);
+            }
         }
-        // "classic" and anything else: filled triangle
-        _ => {
-            p.add(Shape::convex_polygon(
-                vec![tip, back + side * s * 0.5, back - side * s * 0.5],
-                color,
-                Stroke::NONE,
-            ));
+        ArrowKind::ErZeroToOne => {
+            p.circle_stroke(tip - dir * s * 0.85, s * 0.3, stroke);
+            let bt = tip - dir * s * 0.35;
+            p.line_segment([bt + side * s * 0.5, bt - side * s * 0.5], stroke);
         }
-    }
-}
-
-fn arrow_glyph(p: &egui::Painter, c: Pos2, dir: Vec2, color: Color32, scale: f32, open: bool) {
-    let s = 8.0 * scale;
-    let side = Vec2::new(-dir.y, dir.x);
-    if open {
-        p.line_segment([c - dir * s + side * s * 0.7, c], Stroke::new(1.5 * scale, color));
-        p.line_segment([c - dir * s - side * s * 0.7, c], Stroke::new(1.5 * scale, color));
-    } else {
-        p.add(Shape::convex_polygon(vec![c + dir * s * 0.6, c - dir * s * 0.5 + side * s * 0.5, c - dir * s * 0.5 - side * s * 0.5], color, Stroke::NONE));
+        ArrowKind::ErZeroToMany => {
+            p.circle_stroke(tip - dir * s * 0.85, s * 0.3, stroke);
+            for f in [-0.55, 0.0, 0.55] {
+                p.line_segment([tip - dir * s * 0.45, tip + side * s * f], stroke);
+            }
+        }
+        ArrowKind::DoubleBlock => {
+            poly(vec![tip, back + side * s * 0.5, back - side * s * 0.5], fill.then_some(color));
+            let b2 = back - dir * s * 0.9;
+            poly(vec![back, b2 + side * s * 0.5, b2 - side * s * 0.5], fill.then_some(color));
+        }
     }
 }
 
@@ -1235,7 +1554,7 @@ pub fn zoom_at(app: &mut DrawApp, canvas: Rect, pointer: Pos2, factor: f32) {
 pub fn fit_page(app: &mut DrawApp) {
     let Some(rect) = app.view_rect else { return };
     let (pw, ph) = {
-        let page = app.page();
+        let page = app.page().clone();
         (page.page_w, page.page_h)
     };
     let zw = (rect.width() - 60.0) / pw.max(1.0);
@@ -1255,7 +1574,7 @@ fn minimap(app: &mut DrawApp, ui: &mut Ui, canvas: Rect, painter: &egui::Painter
     painter.rect_filled(mm, CornerRadius::same(4), Color32::from_rgba_premultiplied(0x26, 0x26, 0x2b, 235));
     painter.rect_stroke(mm, CornerRadius::same(4), Stroke::new(1.0, Color32::from_rgb(0x45, 0x45, 0x4e)), StrokeKind::Inside);
 
-    let page = app.page();
+    let page = app.page().clone();
     // world bounds: page ∪ content
     let mut bounds = Rect::from_min_size(Pos2::ZERO, Vec2::new(page.page_w, page.page_h));
     for c in page.cells.iter().filter(|c| c.vertex && page.layer_visible(c)) {
@@ -1275,7 +1594,7 @@ fn minimap(app: &mut DrawApp, ui: &mut Ui, canvas: Rect, painter: &egui::Painter
             let r = Rect::from_two_pos(map(Pos2::new(c.geom.x, c.geom.y)), map(Pos2::new(c.geom.x + c.geom.w, c.geom.y + c.geom.h)));
             painter.rect_filled(r, CornerRadius::ZERO, Color32::from_rgba_premultiplied(0xd0, 0xd0, 0xd8, 140));
         } else {
-            let pts = route_points(page, c);
+            let pts = connection::route_points(&page, c);
             if pts.len() >= 2 {
                 let sp: Vec<Pos2> = pts.iter().map(|p| map(*p)).collect();
                 painter.add(Shape::line(sp, Stroke::new(1.0, Color32::from_rgba_premultiplied(0xd0, 0xd0, 0xd8, 120))));

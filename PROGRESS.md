@@ -96,3 +96,77 @@ app (doccraft binary)
 - Renderer: eframe with `wgpu` feature; headless runs use `WGPU_BACKEND=gl`
   (EGL) under Xvfb, same recipe as the earlier DocCraft builds
   (`LD_LIBRARY_PATH=/home/z/local-libs`).
+
+
+---
+
+# DocCraft Suite 3.2 — Task 13 (Windows + drawio connections + launcher)
+
+## What changed in 3.2
+1. **TEN crafts in one binary** — the suite now hosts: Writer (WordCraft),
+   Sheets (GridCraft), Slides (DeckCraft), Reader (PdfCraft), Design (FigCraft),
+   Draw (drawio-native), Vector (Illustrator-native), Markdown, Typeset and Notes.
+   Vector and Notes are new native crafts (crates/vector, crates/notes).
+2. **drawio connection system re-derived from the real drawio/mxGraph JS**
+   (see DRAWIO-SPEC.md): hover connection arrows (#29b6f2) appear after 140 ms,
+   dragging one shows fixed-point × markers + blue valid-target highlight
+   (#00a8ff w5 50%) + green snap ring (#00FF00 50%); dropping LINKS the edge to
+   both shapes (source/target ids survive shape moves; exitX/exitY/entryX/entryY
+   pinned when snapped to a point). Edge endpoints are draggable handles that
+   re-link or dangle. Style panel edge section: Route (Orthogonal/Elbow H-V/
+   Entity Relation/Curved/Straight), **Line start / Line end** full drawio marker
+   list (classic/block/open/oval/diamond/ERone/ERmany/… with fill variants),
+   Size s/e (marker sizes), Offset (perimeter spacing), Line Jumps
+   (none/arc/gap/sharp/line + size), width/dash/opacity/colors.
+3. **Full export** from Draw: .drawio XML (round-trip), SVG, PNG (software
+   rasterizer + bitmap font) and PDF (vector writer), with zoom/border/
+   transparent options.
+4. **Craft-launcher chrome**: the shell now copies the storytold craft-launcher
+   (ArtCraft Launcher v0.5.1) design system — dark #121316 tokens, square
+   corners, 1px hairlines, uppercase Geist-mono-style labels, tracked display
+   headings, custom 48 px header (logo mark + min/max/close window buttons,
+   drag-to-move), launcher card grid on shared hairlines with the 0.3 s hover
+   motion (app-color rule wipe, icon lift), footer with WEBSITE/GITHUB links,
+   and ONE About window (About DocCraft) listing every craft's honest readiness.
+5. **Discord → Website**: WordCraft's title-bar community pill now reads
+   "Website" and opens github.com/storytold (scripts/apply-overrides.sh, idempotent,
+   re-applied automatically by scripts/update-crafts.sh).
+6. **Windows binary + file registration**: cargo-xwin cross-build
+   (x86_64-pc-windows-msvc, aws-lc-sys built NO_ASM for the cross target —
+   documented local overrides in the registry crate sources). Delivered:
+   DocCraft.exe (207 MB PE32+ x64), install.bat / install.ps1 (copies to
+   %LOCALAPPDATA%\DocCraft and registers Open-with for 27 file types via HKCU,
+   no admin needed), uninstall.bat, doccraft.ico. In-app: About panel button +
+   `DocCraft.exe --register-associations` do the same registration.
+7. **Git**: submodules re-attached after a repo-history rebuild (the old .git
+   had 2.3 GB of accidentally-committed build artifacts — now .gitignored).
+   figcraft was restored as a proper gitlink at v0.7.0-104 (d8ff144).
+
+## Windows build recipe (for rebuilds)
+```
+rustup target add x86_64-pc-windows-msvc
+cargo install cargo-xwin            # + clang-19/lld-19/llvm-19 + ninja on PATH
+# local overrides (already applied to the registry sources on this machine):
+#   aws-lc-sys builder: allow AWS_LC_SYS_NO_ASM at any opt level
+#   aws-lc hrss.c: exclude SSE2 union-op block under clang-cl (_MSC_VER)
+export AWS_LC_SYS_NO_ASM=1
+cargo xwin build --profile fast --target x86_64-pc-windows-msvc -p doccraft
+# → target/x86_64-pc-windows-msvc/fast/deps/doccraft.exe
+```
+Crypto runs without assembly under this cross build (slower, still correct);
+a native Windows build with NASM is the upstream-faithful alternative.
+
+## Honest status (unchanged from 3.1 unless noted)
+| craft | version | ready | notes |
+|---|---|---|---|
+| Writer/WordCraft | v0.8.0 | ~60% | real app embedded |
+| Sheets/GridCraft | v0.8.0 | ~75% | functions 98.1% |
+| Slides/DeckCraft | v0.8.0 | ~55% | real app embedded |
+| Reader/PdfCraft | v0.9.0 | ~50% | real app embedded |
+| Design/FigCraft | v0.7.0 | ~53% | 10th system fully embedded |
+| Draw/drawio-native | 3.2.0 | — | connections/arrows/export per JS spec |
+| Vector (Illustrator) | 3.2.0 | — | ported from DocCraft 2.5 to egui 0.36 |
+| Markdown | 3.1.0 | — | wordcraft-anatomy chrome + settings |
+| Typeset | 3.1.0 | — | pagination + real PDF |
+| Notes | 3.2.0 | — | new notebook craft |
+| craft-launcher chrome | 0.5.1 (ref) | — | tokens/motion/header copied |

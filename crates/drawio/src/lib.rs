@@ -6,14 +6,18 @@
 //! in place.
 //!
 //! Module map:
-//! - [`model`]  — mxGraph document model (pages, cells, layers, groups)
-//! - [`xmlio`]  — lossless `.drawio` XML reading/writing
-//! - [`style`]  — mxGraph style-string parsing/editing, swatches, arrows
-//! - [`shapes`] — the shape library catalog + geometry painters
-//! - [`canvas`] — the drawing canvas (interaction, routing, guides, minimap)
-//! - [`ui`]     — the editor shell (menus, toolbar, panels, dialogs)
+//! - [`model`]      — mxGraph document model (pages, cells, layers, groups)
+//! - [`connection`] — connection engine (fixed points, perimeter math, drags)
+//! - [`xmlio`]      — lossless `.drawio` XML reading/writing
+//! - [`style`]      — mxGraph style-string parsing/editing, swatches, arrows
+//! - [`shapes`]     — the shape library catalog + geometry painters
+//! - [`canvas`]     — the drawing canvas (interaction, routing, guides, minimap)
+//! - [`ui`]         — the editor shell (menus, toolbar, panels, dialogs)
+//! - [`export`]     — SVG / PNG / PDF export of a page
 
 pub mod canvas;
+pub mod connection;
+pub mod export;
 pub mod model;
 pub mod shapes;
 pub mod style;

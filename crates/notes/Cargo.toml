@@ -1,0 +1,8 @@
+[package]
+name = "doccraft-notes"
+version.workspace = true
+edition.workspace = true
+description = "Native Notes craft for DocCraft: multi-page notebook with markdown-lite preview, wordcraft-style chrome."
+
+[dependencies]
+egui.workspace = true

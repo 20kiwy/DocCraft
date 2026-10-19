@@ -2,7 +2,7 @@
 name = "doccraft"
 version.workspace = true
 edition.workspace = true
-description = "DocCraft 3.0 — one binary hosting the four real storytold crafts (WordCraft, GridCraft, DeckCraft, PdfCraft) plus the native Draw (drawio), Markdown and Typeset crafts."
+description = "DocCraft Suite — one binary hosting the real storytold crafts (WordCraft, GridCraft, DeckCraft, PdfCraft, FigCraft) plus the native Draw (drawio), Vector, Markdown, Typeset and Notes crafts."
 
 [[bin]]
 name = "doccraft"
@@ -30,3 +30,5 @@ figcraft-engine.workspace = true
 doccraft-drawio.workspace = true
 doccraft-md.workspace = true
 doccraft-typeset.workspace = true
+vector.workspace = true
+doccraft-notes.workspace = true

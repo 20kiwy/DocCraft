@@ -5,6 +5,8 @@ members = [
     "crates/drawio",
     "crates/md",
     "crates/typeset",
+    "crates/vector",
+    "crates/notes",
 ]
 # The six real upstream craft systems live here as git submodules and keep
 # their own workspaces; they are consumed as path dependencies from `app`.
@@ -47,6 +49,8 @@ figcraft-engine   = { path = "upstream/figcraft/crates/engine" }
 doccraft-drawio   = { path = "crates/drawio" }
 doccraft-md       = { path = "crates/md" }
 doccraft-typeset  = { path = "crates/typeset" }
+vector            = { path = "crates/vector" }
+doccraft-notes    = { path = "crates/notes" }
 
 # All crafts share ONE local craft-libs checkout, whatever revision each
 # upstream repo pinned, so the whole suite links a single `craft-ui` (and the

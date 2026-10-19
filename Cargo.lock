@@ -1797,6 +1797,7 @@ dependencies = [
  "deckcraft-ui-egui",
  "doccraft-drawio",
  "doccraft-md",
+ "doccraft-notes",
  "doccraft-typeset",
  "eframe",
  "egui",
@@ -1807,6 +1808,7 @@ dependencies = [
  "log",
  "pdfcraft-ui-egui",
  "serde_json",
+ "vector",
  "wordcraft-engine",
  "wordcraft-ui-egui",
 ]
@@ -1829,6 +1831,13 @@ dependencies = [
  "craft-ui",
  "egui",
  "serde_json",
+]
+
+[[package]]
+name = "doccraft-notes"
+version = "3.0.0"
+dependencies = [
+ "egui",
 ]
 
 [[package]]
@@ -8055,6 +8064,15 @@ dependencies = [
  "js-sys",
  "serde_core",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "vector"
+version = "3.0.0"
+dependencies = [
+ "egui",
+ "roxmltree 0.19.0",
+ "serde_json",
 ]
 
 [[package]]
