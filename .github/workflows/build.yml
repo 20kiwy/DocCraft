@@ -97,7 +97,10 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          # Cargo.toml is the single source of truth: GITHUB_REF_NAME differs per
+          # event (tag "v3.3.0" / branch "main" / pull_request "<n>/merge") and a
+          # slash in it corrupts the artifact path.
+          VERSION="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)"
           NAME="doccraft-${VERSION}-${{ matrix.name }}"
           mkdir -p "dist/$NAME"
           cp "target/${{ matrix.target }}/fast/${{ matrix.exe }}" "dist/$NAME/"
@@ -110,7 +113,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $version = "$env:GITHUB_REF_NAME" -replace '^v',''
+          # Same as the Linux/macOS step: read the version from Cargo.toml
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
           $name = "doccraft-$version-windows-x64"
           New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
           Copy-Item "target/${{ matrix.target }}/fast/doccraft.exe" "dist/$name/"
