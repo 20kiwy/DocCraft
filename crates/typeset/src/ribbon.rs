@@ -2,8 +2,9 @@
 //! anatomy — a 28 pt tab strip, then a grouped command strip with small uppercase
 //! captions under each group. The Page tab edits the layout settings directly.
 
-use crate::ui::{self, PaneTab, Tab, TypesetApp, ACCENT, ACTIVE, BORDER, CONTENT_H, DIM, FAINT, HOVER, LABEL_H, PANEL, TEXT};
+use crate::ui::{self, PaneTab, Tab, TypesetApp, CONTENT_H, LABEL_H};
 use crate::layout;
+use doccraft_theme::Tokens;
 use egui::{Align2, Color32, FontId, Margin, Rect, Sense, Stroke, Ui, WidgetText, pos2, vec2};
 
 /// Tab strip + grouped command strip.
@@ -13,24 +14,27 @@ pub fn show(app: &mut TypesetApp, ui: &mut Ui) {
 }
 
 fn tabs(app: &mut TypesetApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
     egui::Panel::top("ts_tabs")
         .exact_size(28.0)
-        .frame(egui::Frame::NONE.fill(PANEL).inner_margin(Margin { left: 8, right: 10, top: 0, bottom: 0 }))
+        .frame(egui::Frame::NONE.fill(t.panel).inner_margin(Margin { left: 8, right: 10, top: 0, bottom: 0 }))
         .show(ui, |ui| {
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
                 for tab in [Tab::Home, Tab::Insert, Tab::Page, Tab::View] {
                     let name = tab.name();
-                    let w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(name.to_string(), FontId::proportional(12.5), TEXT).size().x) + 22.0;
+                    let w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(name.to_string(), FontId::proportional(12.5), t.text).size().x) + 22.0;
                     let (r, resp) = ui.allocate_exact_size(vec2(w, 28.0), Sense::click());
                     let active = app.tab == tab;
-                    if resp.hovered() && !active {
-                        ui.painter().rect_filled(r.shrink2(vec2(0.0, 4.0)), 4.0, HOVER);
+                    if active {
+                        ui.painter().rect_filled(r, 0.0, t.tab_active);
+                    } else if resp.hovered() {
+                        ui.painter().rect_filled(r.shrink2(vec2(0.0, 4.0)), 5.0, t.hover);
                     }
-                    ui.painter().text(r.center(), Align2::CENTER_CENTER, name, FontId::proportional(12.5), if active { TEXT } else { DIM });
+                    ui.painter().text(r.center(), Align2::CENTER_CENTER, name, FontId::proportional(12.5), if active { t.text } else { t.text_secondary });
                     if active {
                         let u = Rect::from_center_size(pos2(r.center().x, r.max.y - 2.0), vec2(w - 18.0, 3.0));
-                        ui.painter().rect_filled(u, 2.0, ACCENT);
+                        ui.painter().rect_filled(u, 2.0, t.accent);
                     }
                     if resp.clicked() {
                         app.tab = tab;
@@ -41,13 +45,14 @@ fn tabs(app: &mut TypesetApp, ui: &mut Ui) {
 }
 
 fn commands(app: &mut TypesetApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
     egui::Panel::top("ts_ribbon")
         .exact_size(CONTENT_H + LABEL_H + 8.0)
         .frame(
             egui::Frame::NONE
-                .fill(PANEL)
+                .fill(t.panel)
                 .inner_margin(Margin { left: 8, right: 8, top: 4, bottom: 4 })
-                .stroke(Stroke::new(1.0, BORDER)),
+                .stroke(Stroke::new(1.0, t.border)),
         )
         .show(ui, |ui| {
             ui.style_mut().spacing.interact_size.y = 22.0;
@@ -289,9 +294,10 @@ fn view(app: &mut TypesetApp, ui: &mut Ui) {
 
 /// A ribbon group: content, a centred uppercase caption below and a divider on the right.
 fn group(ui: &mut Ui, title: &str, add: impl FnOnce(&mut Ui)) {
+    let t = Tokens::get(ui.ctx());
     let start = ui.cursor().min;
     let label = title.to_uppercase();
-    let label_w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(label.clone(), FontId::proportional(10.0), FAINT).size().x);
+    let label_w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(label.clone(), FontId::proportional(10.0), t.text_secondary).size().x);
     let inner = ui.vertical(|ui| {
         ui.set_min_width(label_w.max(52.0) + 12.0);
         ui.allocate_ui_with_layout(
@@ -310,78 +316,93 @@ fn group(ui: &mut Ui, title: &str, add: impl FnOnce(&mut Ui)) {
         Align2::CENTER_CENTER,
         label,
         FontId::proportional(10.0),
-        FAINT,
+        t.text_secondary,
     );
     ui.add_space(5.0);
     let x = ui.cursor().min.x;
-    ui.painter().line_segment([pos2(x, start.y + 4.0), pos2(x, start.y + full_h - 4.0)], Stroke::new(1.0, BORDER));
+    ui.painter().line_segment([pos2(x, start.y + 4.0), pos2(x, start.y + full_h - 4.0)], Stroke::new(1.0, t.border));
     ui.add_space(6.0);
 }
 
-/// A small labelled button (WordCraft's `small`, drawn by hand for the dark chrome).
+/// A small labelled tile (WordCraft's `small`): field fill, hover highlight,
+/// accent + white ink when active.
 pub fn small(ui: &mut Ui, label: &str, active: bool) -> egui::Response {
-    let w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(label.to_string(), FontId::proportional(12.0), TEXT).size().x) + 14.0;
+    let t = Tokens::get(ui.ctx());
+    let w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(label.to_string(), FontId::proportional(12.0), t.text).size().x) + 14.0;
     let (r, resp) = ui.allocate_exact_size(vec2(w.max(24.0), 22.0), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
     if active {
-        ui.painter().rect_filled(r, 4.0, ACTIVE);
+        ui.painter().rect_filled(r, 5.0, t.accent);
     } else if resp.hovered() {
-        ui.painter().rect_filled(r, 4.0, HOVER);
+        ui.painter().rect_filled(r, 5.0, t.hover);
+    } else {
+        ui.painter().rect_filled(r, 5.0, t.field);
     }
-    let ink = if active { ui_color_on_active() } else { TEXT };
+    let ink = if active { Color32::WHITE } else { t.text };
     ui.painter().text(r.center(), Align2::CENTER_CENTER, label, FontId::proportional(12.0), ink);
     resp
 }
 
 /// A small square button with a text glyph (B, I, −, +…).
 fn glyph(ui: &mut Ui, g: &str, size: f32, active: bool) -> egui::Response {
+    let t = Tokens::get(ui.ctx());
     let (r, resp) = ui.allocate_exact_size(vec2(24.0, 22.0), Sense::click());
     if active {
-        ui.painter().rect_filled(r, 4.0, ACTIVE);
+        ui.painter().rect_filled(r, 5.0, t.accent);
     } else if resp.hovered() {
-        ui.painter().rect_filled(r, 4.0, HOVER);
+        ui.painter().rect_filled(r, 5.0, t.hover);
+    } else {
+        ui.painter().rect_filled(r, 5.0, t.field);
     }
-    ui.painter().text(r.center(), Align2::CENTER_CENTER, g, FontId::proportional(size), TEXT);
+    ui.painter().text(r.center(), Align2::CENTER_CENTER, g, FontId::proportional(size), if active { Color32::WHITE } else { t.text });
     resp
 }
 
 /// A large button: a letter tile or vector icon on top, a two-line label below.
 fn big(ui: &mut Ui, tile: &str, label: &str, active: bool) -> egui::Response {
+    let t = Tokens::get(ui.ctx());
     let (r, resp) = ui.allocate_exact_size(vec2(50.0, CONTENT_H - 6.0), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label.replace('\n', " ").as_str()));
     if active {
-        ui.painter().rect_filled(r, 4.0, ACTIVE);
+        ui.painter().rect_filled(r, 5.0, t.accent);
     } else if resp.hovered() {
-        ui.painter().rect_filled(r, 4.0, HOVER);
+        ui.painter().rect_filled(r, 5.0, t.hover);
+    } else {
+        ui.painter().rect_filled(r, 5.0, t.field);
     }
-    let ink = if active { ui_color_on_active() } else { TEXT };
+    let ink = if active { Color32::WHITE } else { t.text };
+    let label_ink = if active { Color32::WHITE } else { t.text_secondary };
     tile_rect(ui.painter(), Rect::from_center_size(pos2(r.center().x, r.min.y + 16.0), vec2(28.0, 22.0)), tile, ink);
     let mut lines = label.splitn(2, '\n');
     let l1 = lines.next().unwrap_or("");
     let l2 = lines.next().unwrap_or("");
-    ui.painter().text(pos2(r.center().x, r.min.y + 37.0), Align2::CENTER_CENTER, l1, FontId::proportional(10.5), ink);
+    ui.painter().text(pos2(r.center().x, r.min.y + 37.0), Align2::CENTER_CENTER, l1, FontId::proportional(10.5), label_ink);
     if !l2.is_empty() {
-        ui.painter().text(pos2(r.center().x, r.min.y + 49.0), Align2::CENTER_CENTER, l2, FontId::proportional(10.5), ink);
+        ui.painter().text(pos2(r.center().x, r.min.y + 49.0), Align2::CENTER_CENTER, l2, FontId::proportional(10.5), label_ink);
     }
     resp
 }
 
 /// Like [`big`], but the tile paints a vector icon by name.
 fn big_icon(ui: &mut Ui, icon: &str, label: &str, active: bool) -> egui::Response {
+    let t = Tokens::get(ui.ctx());
     let (r, resp) = ui.allocate_exact_size(vec2(50.0, CONTENT_H - 6.0), Sense::click());
     if active {
-        ui.painter().rect_filled(r, 4.0, ACTIVE);
+        ui.painter().rect_filled(r, 5.0, t.accent);
     } else if resp.hovered() {
-        ui.painter().rect_filled(r, 4.0, HOVER);
+        ui.painter().rect_filled(r, 5.0, t.hover);
+    } else {
+        ui.painter().rect_filled(r, 5.0, t.field);
     }
-    let ink = if active { ui_color_on_active() } else { TEXT };
-    ui::paint_icon(ui.painter(), Rect::from_center_size(pos2(r.center().x, r.min.y + 16.0), vec2(24.0, 24.0)), icon, ink);
+    let ink = if active { Color32::WHITE } else { t.text };
+    let label_ink = if active { Color32::WHITE } else { t.text_secondary };
+    ui::paint_icon(ui.painter(), Rect::from_center_size(pos2(r.center().x, r.min.y + 16.0), vec2(24.0, 24.0)), icon, ink, t.panel);
     let mut lines = label.splitn(2, '\n');
     let l1 = lines.next().unwrap_or("");
     let l2 = lines.next().unwrap_or("");
-    ui.painter().text(pos2(r.center().x, r.min.y + 37.0), Align2::CENTER_CENTER, l1, FontId::proportional(10.5), ink);
+    ui.painter().text(pos2(r.center().x, r.min.y + 37.0), Align2::CENTER_CENTER, l1, FontId::proportional(10.5), label_ink);
     if !l2.is_empty() {
-        ui.painter().text(pos2(r.center().x, r.min.y + 49.0), Align2::CENTER_CENTER, l2, FontId::proportional(10.5), ink);
+        ui.painter().text(pos2(r.center().x, r.min.y + 49.0), Align2::CENTER_CENTER, l2, FontId::proportional(10.5), label_ink);
     }
     resp
 }
@@ -390,8 +411,4 @@ fn big_icon(ui: &mut Ui, icon: &str, label: &str, active: bool) -> egui::Respons
 fn tile_rect(p: &egui::Painter, r: Rect, label: &str, ink: Color32) {
     p.rect_stroke(r, 4.0, Stroke::new(1.2, ink), egui::StrokeKind::Inside);
     p.text(r.center(), Align2::CENTER_CENTER, label, FontId::proportional(11.5), ink);
-}
-
-fn ui_color_on_active() -> Color32 {
-    Color32::from_rgb(0xf0, 0xea, 0xf8)
 }

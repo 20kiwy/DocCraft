@@ -4,3 +4,4 @@ keep/
 *.zip
 node_modules/
 shots/*.xwd
+worklog.md

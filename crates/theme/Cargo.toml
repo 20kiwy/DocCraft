@@ -1,0 +1,8 @@
+[package]
+name = "doccraft-theme"
+version.workspace = true
+edition.workspace = true
+description = "DocCraft shared design tokens: the FigCraft UI3 light/dark token system every native craft paints with, so Draw, Markdown, Typeset and Notes share one design language with the upstream crafts."
+
+[dependencies]
+egui.workspace = true

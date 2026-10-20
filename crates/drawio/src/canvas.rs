@@ -11,13 +11,9 @@ use crate::model::{ArrowKind, Cell, Diagram};
 use crate::shapes::{self, Xf};
 use crate::style::{self, Look};
 use crate::ui::{Drag, DrawApp, Tool};
-use egui::{Align2, Color32, CornerRadius, FontId, Pos2, Rect, Sense, Shape, Stroke, StrokeKind, Ui, Vec2};
+use doccraft_theme::Tokens;
+use egui::{Color32, CornerRadius, FontId, Pos2, Rect, Sense, Shape, Stroke, StrokeKind, Ui, Vec2};
 
-pub const ACCENT: Color32 = Color32::from_rgb(0xf0, 0x87, 0x2d);
-const GUIDE: Color32 = Color32::from_rgb(0xff, 0x44, 0xd0);
-const CANVAS_BG: Color32 = Color32::from_rgb(0x1e, 0x1e, 0x22);
-const GRID_MINOR: Color32 = Color32::from_rgb(0x27, 0x27, 0x2d);
-const GRID_MAJOR: Color32 = Color32::from_rgb(0x30, 0x30, 0x38);
 const HANDLE_FILL: Color32 = Color32::from_rgb(0xff, 0xff, 0xff);
 pub const HANDLE: f32 = 7.0;
 // drawio connection colors (spec §1 — three different "blues/greens")
@@ -67,6 +63,29 @@ pub fn to_world(pan: Vec2, zoom: f32, origin: Pos2, p: Pos2) -> Pos2 {
     Pos2::new(v.x, v.y)
 }
 
+/// Screen position → canvas world position (palette drag & drop, overlay hit tests).
+/// Uses the canvas rect recorded on the last [`show`] frame.
+pub fn screen_to_world(app: &DrawApp, pos: Pos2) -> Pos2 {
+    let Some(r) = app.view_rect else { return Pos2::ZERO };
+    to_world(app.pan, app.zoom, r.min, pos)
+}
+
+/// Linear mix a→b in sRGB space (`t` = 0 gives `a`, 1 gives `b`).
+fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
+    let f = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round().clamp(0.0, 255.0) as u8;
+    Color32::from_rgb(f(a.r(), b.r()), f(a.g(), b.g()), f(a.b(), b.b()))
+}
+
+/// Grid colors derived from the tokens: subtle in both themes, major lines
+/// slightly stronger than minor ones.
+fn grid_colors(t: &Tokens) -> (Color32, Color32) {
+    if t.dark {
+        (mix(t.border, t.canvas, 0.55), mix(t.border, t.canvas, 0.2))
+    } else {
+        (mix(t.border, t.canvas, 0.15), mix(t.border, t.canvas, 0.45))
+    }
+}
+
 /// The world-space rectangle currently visible on the canvas.
 pub fn viewport(app: &DrawApp, canvas: Rect) -> Rect {
     let a = to_world(app.pan, app.zoom, canvas.min, canvas.left_top());
@@ -77,24 +96,30 @@ pub fn viewport(app: &DrawApp, canvas: Rect) -> Rect {
 // ── entry point ──────────────────────────────────────────────────────────────
 
 pub fn show(app: &mut DrawApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
     let (rect, resp) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
     app.view_rect = Some(rect);
     let painter = ui.painter_at(rect.expand(1.0));
-    painter.rect_filled(rect, CornerRadius::ZERO, CANVAS_BG);
+    painter.rect_filled(rect, CornerRadius::ZERO, t.canvas);
 
     let page_setup = app.page();
     let (page_w, page_h, page_bg) = (page_setup.page_w, page_setup.page_h, page_setup.background.clone());
-    let page_bg = page_bg.as_deref().and_then(style::parse_color).unwrap_or(Color32::from_rgb(0xf7, 0xf7, 0xf7));
+    // explicit page background wins; otherwise pure white in light theme,
+    // dark-sheet gray in the dark theme
+    let page_bg = page_bg
+        .as_deref()
+        .and_then(style::parse_color)
+        .unwrap_or(if t.dark { Color32::from_rgb(0x25, 0x25, 0x26) } else { Color32::WHITE });
 
     if app.show_grid {
-        draw_grid(&painter, rect, app.pan, app.zoom, app.grid);
+        draw_grid(&painter, rect, app.pan, app.zoom, app.grid, &t);
     }
 
-    // page sheet with shadow
+    // page sheet with a soft theme shadow
     let page = Rect::from_min_size(to_screen(app.pan, app.zoom, rect.min, Pos2::ZERO), Vec2::new(page_w * app.zoom, page_h * app.zoom));
-    painter.rect_filled(page.translate(Vec2::new(4.0, 5.0)), CornerRadius::ZERO, Color32::from_black_alpha(70));
+    painter.add(doccraft_theme::card_shadow(&t).as_shape(page, CornerRadius::ZERO));
     painter.rect_filled(page, CornerRadius::ZERO, page_bg);
-    painter.rect_stroke(page, CornerRadius::ZERO, Stroke::new(1.0, Color32::from_rgb(0x55, 0x55, 0x5c)), StrokeKind::Outside);
+    painter.rect_stroke(page, CornerRadius::ZERO, Stroke::new(1.0, t.border_strong), StrokeKind::Outside);
 
     let pan = app.pan;
     let zoom = app.zoom;
@@ -131,7 +156,7 @@ pub fn show(app: &mut DrawApp, ui: &mut Ui) {
                 let mut look = style::edge_look(&c.style, zoom);
                 apply_opacity(&mut look, c);
                 if selected {
-                    paint_polyline(&painter, pts, &Stroke::new(4.0 * zoom.max(0.5), ACCENT.linear_multiply(0.35)), &[]);
+                    paint_polyline(&painter, pts, &Stroke::new(4.0 * zoom.max(0.5), t.accent.linear_multiply(0.35)), &[]);
                 }
                 let jumps = if style::line_jump(&c.style) && *route == style::EdgeRoute::Orthogonal && zoom >= 0.4 {
                     compute_jumps(&c.id, pts, &routes)
@@ -151,7 +176,7 @@ pub fn show(app: &mut DrawApp, ui: &mut Ui) {
                 let mut look = style::vertex_look(&c.style, zoom);
                 apply_opacity(&mut look, c);
                 if selected {
-                    painter.rect_filled(r, CornerRadius::same(2), ACCENT.linear_multiply(0.12));
+                    painter.rect_filled(r, CornerRadius::same(2), t.accent.linear_multiply(0.12));
                 }
                 let xf = Xf::from_style(&c.style);
                 shapes::paint_vertex(&painter, r, &c.style, &look, &c.value, &xf);
@@ -167,7 +192,7 @@ pub fn show(app: &mut DrawApp, ui: &mut Ui) {
             && c.vertex
         {
             let r = Rect::from_min_size(w2s(Pos2::new(c.geom.x, c.geom.y)), Vec2::new(c.geom.w * zoom, c.geom.h * zoom)).expand(3.0);
-            painter.rect_stroke(r, CornerRadius::same(3), Stroke::new(1.5, Color32::from_rgb(0x40, 0xc0, 0x60)), StrokeKind::Outside);
+            painter.rect_stroke(r, CornerRadius::same(3), Stroke::new(1.5, t.success), StrokeKind::Outside);
         }
     }
 
@@ -182,7 +207,7 @@ pub fn show(app: &mut DrawApp, ui: &mut Ui) {
         painter.rect_filled(bg, CornerRadius::same(2), Color32::from_white_alpha(215));
         painter.galley(mid - sz / 2.0, galley, look.text);
         if sel.contains(&id) {
-            painter.rect_stroke(bg, CornerRadius::same(2), Stroke::new(1.0, ACCENT), StrokeKind::Outside);
+            painter.rect_stroke(bg, CornerRadius::same(2), Stroke::new(1.0, t.accent), StrokeKind::Outside);
         }
     }
 
@@ -192,19 +217,19 @@ pub fn show(app: &mut DrawApp, ui: &mut Ui) {
         && c.vertex
     {
         let r = Rect::from_min_size(w2s(Pos2::new(c.geom.x, c.geom.y)), Vec2::new(c.geom.w * zoom, c.geom.h * zoom));
-        painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(1.2, ACCENT), StrokeKind::Outside);
+        painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(1.2, t.accent), StrokeKind::Outside);
         let hs = HANDLE * zoom.max(0.6).min(1.4);
         for i in 0..8u8 {
             let hr = handle_rect(r, i, hs);
             painter.rect_filled(hr, CornerRadius::same(1), HANDLE_FILL);
-            painter.rect_stroke(hr, CornerRadius::same(1), Stroke::new(1.0, ACCENT), StrokeKind::Outside);
+            painter.rect_stroke(hr, CornerRadius::same(1), Stroke::new(1.0, t.accent), StrokeKind::Outside);
         }
     }
     if sel.len() > 1
         && let Some((bx, by, bw, bh)) = app.page().bbox(&sel)
     {
         let r = Rect::from_min_size(w2s(Pos2::new(bx, by)), Vec2::new(bw * zoom, bh * zoom));
-        painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(1.0, ACCENT.linear_multiply(0.8)), StrokeKind::Outside);
+        painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(1.0, t.accent.linear_multiply(0.8)), StrokeKind::Outside);
     }
     // single selected edge: waypoint handles + endpoint handles
     if let Some(id) = sel.first().cloned()
@@ -217,7 +242,7 @@ pub fn show(app: &mut DrawApp, ui: &mut Ui) {
             let p = w2s(Pos2::from(*w));
             let r = Rect::from_center_size(p, Vec2::splat(7.0));
             painter.rect_filled(r, CornerRadius::same(1), HANDLE_FILL);
-            painter.rect_stroke(r, CornerRadius::same(1), Stroke::new(1.0, ACCENT), StrokeKind::Outside);
+            painter.rect_stroke(r, CornerRadius::same(1), Stroke::new(1.0, t.accent), StrokeKind::Outside);
             let _ = i;
         }
         // endpoint handles: r=6 #29b6f2 with white stroke; × inside when the
@@ -272,14 +297,14 @@ pub fn show(app: &mut DrawApp, ui: &mut Ui) {
         } else {
             (Pos2::new(vp.left(), pos), Pos2::new(vp.right(), pos))
         };
-        painter.line_segment([w2s(a), w2s(b)], Stroke::new(1.0, GUIDE));
+        painter.line_segment([w2s(a), w2s(b)], Stroke::new(1.0, t.guide));
     }
     if let Drag::Rubber { start, cur } = app.drag.clone() {
         let a = w2s(start);
         let b = w2s(cur);
         let r = Rect::from_two_pos(a, b);
-        painter.rect_filled(r, CornerRadius::ZERO, ACCENT.linear_multiply(0.10));
-        painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(1.0, ACCENT), StrokeKind::Inside);
+        painter.rect_filled(r, CornerRadius::ZERO, t.accent.linear_multiply(0.10));
+        painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(1.0, t.accent), StrokeKind::Inside);
     }
 
     // ── inline label editor ──
@@ -320,7 +345,7 @@ pub fn show(app: &mut DrawApp, ui: &mut Ui) {
 
     // ── minimap ──
     if app.show_outline {
-        minimap(app, ui, rect, &painter);
+        minimap(app, ui, rect, &painter, &t);
     }
 
     // ── interactions ──
@@ -689,14 +714,15 @@ fn context_menu(app: &mut DrawApp, ui: &mut Ui, _rect: Rect) {
         app.ctx_menu = None;
         return;
     }
+    let t = Tokens::get(ui.ctx());
     let open_area = egui::Area::new(egui::Id::new("draw_ctx_menu"))
         .fixed_pos(menu.pos)
         .order(egui::Order::Foreground);
     let mut action: Option<CtxAction> = None;
     open_area.show(ui.ctx(), |ui| {
         egui::Frame::default()
-            .fill(Color32::from_rgb(0x2a, 0x2a, 0x30))
-            .stroke(Stroke::new(1.0, Color32::from_rgb(0x45, 0x45, 0x4e)))
+            .fill(t.panel)
+            .stroke(Stroke::new(1.0, t.border))
             .corner_radius(5.0)
             .inner_margin(egui::Margin::same(4))
             .show(ui, |ui| {
@@ -708,23 +734,23 @@ fn context_menu(app: &mut DrawApp, ui: &mut Ui, _rect: Rect) {
                 let has_cell = menu.cell.is_some();
                 let page = app.page().clone();
                 let locked = menu.cell.as_deref().and_then(|id| page.cell(id)).map(|c| page.layer_locked(c)).unwrap_or(false);
-                if item(ui, "✏ Edit Label", has_cell && !locked) {
+                if item(ui, "Edit Label", has_cell && !locked) {
                     action = Some(CtxAction::EditLabel);
                 }
-                if item(ui, "⧉ Copy", has_cell) {
+                if item(ui, "Copy", has_cell) {
                     action = Some(CtxAction::Copy);
                 }
-                if item(ui, "⧉⧉ Duplicate", has_cell && !locked) {
+                if item(ui, "Duplicate", has_cell && !locked) {
                     action = Some(CtxAction::Duplicate);
                 }
-                if item(ui, "🗑 Delete", has_cell && !locked) {
+                if item(ui, "Delete", has_cell && !locked) {
                     action = Some(CtxAction::Delete);
                 }
                 ui.separator();
-                if item(ui, "⤒ To Front", has_cell && !locked) {
+                if item(ui, "To Front", has_cell && !locked) {
                     action = Some(CtxAction::ToFront);
                 }
-                if item(ui, "⤓ To Back", has_cell && !locked) {
+                if item(ui, "To Back", has_cell && !locked) {
                     action = Some(CtxAction::ToBack);
                 }
                 ui.separator();
@@ -1621,16 +1647,17 @@ pub fn paint_marker(p: &egui::Painter, tip: Pos2, dir: Vec2, color: Color32, kin
 
 // ── chrome ───────────────────────────────────────────────────────────────────
 
-fn draw_grid(p: &egui::Painter, rect: Rect, pan: Vec2, zoom: f32, grid: f32) {
+fn draw_grid(p: &egui::Painter, rect: Rect, pan: Vec2, zoom: f32, grid: f32, t: &Tokens) {
     let step = grid * zoom;
     if step < 4.0 {
         return;
     }
+    let (minor, major) = grid_colors(t);
     let major_every = 5;
     let mut i = 0;
     let mut x = rect.min.x + pan.x % step;
     while x < rect.max.x {
-        let col = if i % major_every == 0 { GRID_MAJOR } else { GRID_MINOR };
+        let col = if i % major_every == 0 { major } else { minor };
         p.line_segment([Pos2::new(x, rect.min.y), Pos2::new(x, rect.max.y)], Stroke::new(0.6, col));
         x += step;
         i += 1;
@@ -1638,7 +1665,7 @@ fn draw_grid(p: &egui::Painter, rect: Rect, pan: Vec2, zoom: f32, grid: f32) {
     let mut i = 0;
     let mut y = rect.min.y + pan.y % step;
     while y < rect.max.y {
-        let col = if i % major_every == 0 { GRID_MAJOR } else { GRID_MINOR };
+        let col = if i % major_every == 0 { major } else { minor };
         p.line_segment([Pos2::new(rect.min.x, y), Pos2::new(rect.max.x, y)], Stroke::new(0.6, col));
         y += step;
         i += 1;
@@ -1686,13 +1713,13 @@ pub fn fit_page(app: &mut DrawApp) {
 
 // ── minimap (outline) ────────────────────────────────────────────────────────
 
-fn minimap(app: &mut DrawApp, ui: &mut Ui, canvas: Rect, painter: &egui::Painter) {
+fn minimap(app: &mut DrawApp, ui: &mut Ui, canvas: Rect, painter: &egui::Painter, t: &Tokens) {
     let size = Vec2::new(160.0, 120.0);
     let mm = Rect::from_min_size(canvas.right_bottom() - Vec2::new(size.x + 12.0, size.y + 12.0), size);
     // sense drag for viewport control, click to jump
     let resp = ui.allocate_rect(mm, Sense::click_and_drag());
-    painter.rect_filled(mm, CornerRadius::same(4), Color32::from_rgba_premultiplied(0x26, 0x26, 0x2b, 235));
-    painter.rect_stroke(mm, CornerRadius::same(4), Stroke::new(1.0, Color32::from_rgb(0x45, 0x45, 0x4e)), StrokeKind::Inside);
+    painter.rect_filled(mm, CornerRadius::same(4), t.panel.gamma_multiply(0.92));
+    painter.rect_stroke(mm, CornerRadius::same(4), Stroke::new(1.0, t.border), StrokeKind::Inside);
 
     let page = app.page().clone();
     // world bounds: page ∪ content
@@ -1707,17 +1734,17 @@ fn minimap(app: &mut DrawApp, ui: &mut Ui, canvas: Rect, painter: &egui::Painter
 
     // page outline
     let pg = Rect::from_two_pos(map(Pos2::ZERO), map(Pos2::new(page.page_w, page.page_h)));
-    painter.rect_stroke(pg, CornerRadius::ZERO, Stroke::new(1.0, Color32::from_rgb(0x60, 0x60, 0x6a)), StrokeKind::Inside);
+    painter.rect_stroke(pg, CornerRadius::ZERO, Stroke::new(1.0, t.border_strong), StrokeKind::Inside);
 
     for c in page.cells.iter().filter(|c| page.layer_visible(c)) {
         if c.vertex {
             let r = Rect::from_two_pos(map(Pos2::new(c.geom.x, c.geom.y)), map(Pos2::new(c.geom.x + c.geom.w, c.geom.y + c.geom.h)));
-            painter.rect_filled(r, CornerRadius::ZERO, Color32::from_rgba_premultiplied(0xd0, 0xd0, 0xd8, 140));
+            painter.rect_filled(r, CornerRadius::ZERO, t.text.gamma_multiply(0.55));
         } else {
             let pts = connection::route_points(&page, c);
             if pts.len() >= 2 {
                 let sp: Vec<Pos2> = pts.iter().map(|p| map(*p)).collect();
-                painter.add(Shape::line(sp, Stroke::new(1.0, Color32::from_rgba_premultiplied(0xd0, 0xd0, 0xd8, 120))));
+                painter.add(Shape::line(sp, Stroke::new(1.0, t.text.gamma_multiply(0.47))));
             }
         }
     }
@@ -1726,7 +1753,7 @@ fn minimap(app: &mut DrawApp, ui: &mut Ui, canvas: Rect, painter: &egui::Painter
     let vp = viewport(app, canvas);
     let v1 = map(vp.min);
     let v2 = map(vp.max);
-    painter.rect_stroke(Rect::from_two_pos(v1, v2), CornerRadius::ZERO, Stroke::new(1.2, ACCENT), StrokeKind::Inside);
+    painter.rect_stroke(Rect::from_two_pos(v1, v2), CornerRadius::ZERO, Stroke::new(1.2, t.accent), StrokeKind::Inside);
 
     // drag → recenter
     let jump = |app: &mut DrawApp, p: Pos2| {

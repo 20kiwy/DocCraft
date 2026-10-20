@@ -6,5 +6,6 @@ description = "Native Markdown craft for DocCraft: CommonMark-subset parser, liv
 
 [dependencies]
 egui.workspace = true
+doccraft-theme.workspace = true
 serde_json.workspace = true
 craft-ui.workspace = true

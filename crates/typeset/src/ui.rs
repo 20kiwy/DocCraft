@@ -4,27 +4,15 @@
 
 use crate::{layout, model};
 use craft_ui::buttons::{ButtonVisuals, IconButton, IconButtonStyle};
+use doccraft_theme::Tokens;
 use egui::widgets::text_edit::TextEditState;
 use egui::{
-    Align2, Color32, Context, CornerRadius, FontFamily, FontId, Id, Margin, Rect, Sense, Stroke, TextWrapMode, Ui, Vec2, pos2, vec2,
+    Align2, Color32, Context, CornerRadius, FontFamily, FontId, Id, Margin, Sense, Stroke, Ui, pos2, vec2,
     text::{CCursor, CCursorRange},
 };
 use std::time::Instant;
 
-// ── dark chrome palette (Typeset accent) ─────────────────────────────────────
-pub const PANEL: Color32 = Color32::from_rgb(0x23, 0x23, 0x27);
-pub const BG: Color32 = Color32::from_rgb(0x1e, 0x1e, 0x22);
-pub const BORDER: Color32 = Color32::from_rgb(0x34, 0x34, 0x3c);
-pub const TEXT: Color32 = Color32::from_rgb(0xe8, 0xe8, 0xec);
-pub const DIM: Color32 = Color32::from_rgb(0x9a, 0x9a, 0xa4);
-pub const FAINT: Color32 = Color32::from_rgb(0x6c, 0x6c, 0x76);
-pub const HOVER: Color32 = Color32::from_rgb(0x2e, 0x2e, 0x34);
-pub const ACTIVE: Color32 = Color32::from_rgb(0x3a, 0x33, 0x44);
-pub const ACCENT: Color32 = Color32::from_rgb(0x7a, 0x4f, 0xa8);
-pub const ACCENT_SOFT: Color32 = Color32::from_rgb(0xb4, 0x92, 0xd8);
-pub const OK: Color32 = Color32::from_rgb(0x7d, 0xc4, 0x7f);
-pub const ERR: Color32 = Color32::from_rgb(0xe0, 0x6c, 0x6c);
-pub const PASTEBOARD: Color32 = Color32::from_rgb(0x3a, 0x3a, 0x40);
+// ── chrome geometry (colors come from doccraft_theme tokens) ─────────────
 pub const CONTENT_H: f32 = 60.0;
 pub const LABEL_H: f32 = 15.0;
 
@@ -96,6 +84,8 @@ pub struct TypesetApp {
     pub zoom: f32,
     pub fit: bool,
     pub rulers: bool,
+    /// Light / dark tokens (default dark); toggled from the title strip or settings.
+    pub dark: bool,
     pub settings_open: bool,
     pub jump: Option<usize>,
     pub caret: (usize, usize),
@@ -128,6 +118,7 @@ impl TypesetApp {
             zoom: 0.62,
             fit: true,
             rulers: false,
+            dark: true,
             settings_open: false,
             jump: None,
             caret: (1, 1),
@@ -343,14 +334,6 @@ impl TypesetApp {
             .unwrap_or((n, n))
     }
 
-    fn set_cursor(&mut self, ctx: &Context, idx: usize) {
-        if let Some(mut st) = TextEditState::load(ctx, Id::new(EDITOR_ID)) {
-            st.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(idx))));
-            st.store(ctx, Id::new(EDITOR_ID));
-        }
-        self.focus_editor = true;
-    }
-
     /// Insert text at the caret (or around the selection).
     pub fn insert_at_cursor(&mut self, ctx: &Context, text: &str) {
         self.snapshot();
@@ -445,7 +428,10 @@ impl TypesetApp {
     // ── frame ───────────────────────────────────────────────────────────────
 
     pub fn ui(&mut self, ui: &mut Ui) {
-        ui.style_mut().visuals = egui::Visuals::dark();
+        // Shared suite design tokens, applied once at the start of every frame.
+        let tokens = if self.dark { doccraft_theme::Tokens::dark() } else { doccraft_theme::Tokens::light() };
+        doccraft_theme::apply(ui.ctx(), tokens);
+        ui.style_mut().visuals = doccraft_theme::visuals(tokens);
         self.debounce(ui.ctx());
         title_strip(self, ui);
         crate::ribbon::show(self, ui);
@@ -463,42 +449,44 @@ impl TypesetApp {
 // ── chrome: title strip + QAT ────────────────────────────────────────────────
 
 fn title_strip(app: &mut TypesetApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
     egui::Panel::top("ts_title")
         .exact_size(34.0)
-        .frame(egui::Frame::NONE.fill(PANEL).inner_margin(Margin { left: 10, right: 10, top: 0, bottom: 0 }).stroke(Stroke::new(1.0, BORDER)))
+        .frame(egui::Frame::NONE.fill(t.panel).inner_margin(Margin { left: 10, right: 10, top: 0, bottom: 0 }).stroke(Stroke::new(1.0, t.border)))
         .show(ui, |ui| {
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
-                ui.label(egui::RichText::new("Typeset").font(FontId::proportional(13.5)).strong().color(ACCENT_SOFT));
+                ui.label(egui::RichText::new("Typeset").font(FontId::proportional(13.5)).strong().color(t.accent_text));
                 ui.separator();
                 let name = app.path.clone().unwrap_or_else(|| "Untitled.typ".into());
-                ui.label(egui::RichText::new(name).font(FontId::proportional(12.0)).color(TEXT));
+                ui.label(egui::RichText::new(name).font(FontId::proportional(12.0)).color(t.text));
                 let (r, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
                 if app.dirty {
-                    ui.painter().circle_filled(r.center(), 3.0, ACCENT);
+                    ui.painter().circle_filled(r.center(), 3.0, t.accent);
                 }
                 ui.add_space(6.0);
                 qat(app, ui);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(egui::RichText::new("Typeset").font(FontId::proportional(11.0)).color(FAINT));
+                    ui.label(egui::RichText::new("Typeset").font(FontId::proportional(11.0)).color(t.text_tertiary));
                     let shown: String = app.status.chars().rev().take(52).collect::<String>().chars().rev().collect();
                     let shown = if shown.chars().count() < app.status.chars().count() { format!("…{shown}") } else { shown };
-                    ui.label(egui::RichText::new(shown).font(FontId::proportional(11.0)).color(DIM));
+                    ui.label(egui::RichText::new(shown).font(FontId::proportional(11.0)).color(t.text_secondary));
                 });
             });
         });
 }
 
 fn qat(app: &mut TypesetApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
     let style = IconButtonStyle {
-        normal: ButtonVisuals { fill: Color32::TRANSPARENT, stroke: Stroke::NONE, icon: DIM },
-        hovered: ButtonVisuals { fill: HOVER, stroke: Stroke::NONE, icon: TEXT },
+        normal: ButtonVisuals { fill: Color32::TRANSPARENT, stroke: Stroke::NONE, icon: t.icon_secondary },
+        hovered: ButtonVisuals { fill: t.hover, stroke: Stroke::NONE, icon: t.icon },
         pressed: None,
-        selected: ButtonVisuals { fill: ACTIVE, stroke: Stroke::NONE, icon: TEXT },
-        corner_radius: CornerRadius::same(4),
+        selected: ButtonVisuals { fill: t.selected_row, stroke: Stroke::NONE, icon: t.icon },
+        corner_radius: CornerRadius::same(5),
         focus_stroke: Stroke::NONE,
     };
-    let mk = |ui: &mut Ui, icon: &str, tip: &str| IconButton::new(tip, vec2(26.0, 24.0), &style).show(ui, |ui, r, c| paint_icon(ui.painter(), r, icon, c));
+    let mk = |ui: &mut Ui, icon: &str, tip: &str| IconButton::new(tip, vec2(26.0, 24.0), &style).show(ui, |ui, r, c| paint_icon(ui.painter(), r, icon, c, t.panel));
     if mk(ui, "save", "Save").clicked() {
         app.save();
     }
@@ -509,82 +497,31 @@ fn qat(app: &mut TypesetApp, ui: &mut Ui) {
         app.recompile();
     }
     ui.separator();
+    // Sun / Moon theme toggle, next to the QAT
+    let (icon, tip) = if app.dark { ("sun", "Switch to the light theme") } else { ("moon", "Switch to the dark theme") };
+    if mk(ui, icon, tip).clicked() {
+        app.dark = !app.dark;
+    }
+    ui.separator();
     if mk(ui, "gear", "Settings").clicked() {
         app.settings_open = !app.settings_open;
     }
 }
 
 /// Small vector icons, WordCraft-tile style: stroke drawings in a 16×16 box.
-pub fn paint_icon(p: &egui::Painter, r: egui::Rect, name: &str, c: Color32) {
-    let m = Rect::from_center_size(r.center(), Vec2::splat(r.height().min(16.0)));
-    let (x0, y0, x1, y1) = (m.min.x, m.min.y, m.max.x, m.max.y);
-    let st = Stroke::new(1.4, c);
-    let cx = m.center().x;
-    match name {
-        "save" => {
-            p.rect_stroke(m.shrink(1.0), 2.0, st, egui::StrokeKind::Inside);
-            p.rect_stroke(Rect::from_min_max(pos2(cx - 4.0, y0 + 1.0), pos2(cx + 4.0, y0 + 6.0)), 1.5, st, egui::StrokeKind::Inside);
-            p.line_segment([pos2(x0 + 4.0, y1 - 3.0), pos2(x1 - 4.0, y1 - 3.0)], st);
-        }
-        "undo" | "compile" => {
-            let c0 = m.center();
-            let rad = m.height() * 0.32;
-            let (a, b) = if name == "undo" { (2.2f32, 5.6f32) } else { (-0.8, 2.6) };
-            let mut prev = pos2(c0.x + rad * a.cos(), c0.y - rad * a.sin());
-            for i in 1..=8 {
-                let t = a + (b - a) * i as f32 / 8.0;
-                let pt = pos2(c0.x + rad * t.cos(), c0.y - rad * t.sin());
-                p.line_segment([prev, pt], st);
-                prev = pt;
-            }
-            let t = b + if name == "undo" { 0.35 } else { -0.35 };
-            let tip = pos2(c0.x + rad * t.cos(), c0.y - rad * t.sin());
-            p.line_segment([prev, tip], st);
-            p.line_segment([prev, pos2(prev.x - 4.0, prev.y - 1.5)], st);
-            p.line_segment([prev, pos2(prev.x - 1.0, prev.y + 4.0)], st);
-        }
-        "gear" => {
-            let c0 = m.center();
-            let rad = m.height() * 0.24;
-            p.circle_stroke(c0, rad, st);
-            p.circle_stroke(c0, rad * 0.35, st);
-            for i in 0..8 {
-                let a = i as f32 * std::f32::consts::TAU / 8.0;
-                p.line_segment([pos2(c0.x + rad * a.cos(), c0.y + rad * a.sin()), pos2(c0.x + rad * 1.7 * a.cos(), c0.y + rad * 1.7 * a.sin())], st);
-            }
-        }
-        "break" => {
-            p.rect_stroke(Rect::from_min_max(pos2(x0 + 4.0, y0 + 1.0), pos2(x1 - 4.0, y1 - 1.0)), 1.5, st, egui::StrokeKind::Inside);
-            for i in 0..3 {
-                let y = m.center().y + (i as f32 - 1.0) * 2.5;
-                p.line_segment([pos2(x0 + 6.5, y), pos2(x1 - 6.5, y)], st);
-            }
-        }
-        "image" => {
-            p.rect_stroke(m.shrink(1.0), 1.5, st, egui::StrokeKind::Inside);
-            p.circle_filled(pos2(x0 + 5.0, y0 + 5.0), 1.6, st.color);
-            p.line_segment([pos2(x0 + 2.5, y1 - 3.0), pos2(x0 + 8.0, y0 + 8.0)], st);
-            p.line_segment([pos2(x0 + 8.0, y0 + 8.0), pos2(x1 - 4.0, y1 - 3.0)], st);
-        }
-        "table" => {
-            p.rect_stroke(m.shrink(1.0), 1.5, st, egui::StrokeKind::Inside);
-            let w = m.width();
-            let h = m.height();
-            p.line_segment([pos2(x0 + w / 3.0, y0 + 1.0), pos2(x0 + w / 3.0, y1 - 1.0)], st);
-            p.line_segment([pos2(x0 + 2.0 * w / 3.0, y0 + 1.0), pos2(x0 + 2.0 * w / 3.0, y1 - 1.0)], st);
-            p.line_segment([pos2(x0 + 1.0, y0 + h / 2.0), pos2(x1 - 1.0, y0 + h / 2.0)], st);
-        }
-        _ => {
-            p.text(m.center(), Align2::CENTER_CENTER, name.chars().next().unwrap_or('?').to_string(), FontId::proportional(11.0), c);
-        }
-    }
+/// `bg` is the chrome fill behind the icon (used to bite the moon crescent).
+/// The drawings live in the shared `doccraft_theme::icons` module so every
+/// native craft paints the exact same set (zero font dependency — no tofu).
+pub fn paint_icon(p: &egui::Painter, r: egui::Rect, name: &str, c: Color32, bg: Color32) {
+    doccraft_theme::icons::paint(p, r, name, c, bg);
 }
 
 // ── body: find bar, gutter, editor ───────────────────────────────────────────
 
 fn body(app: &mut TypesetApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
     egui::CentralPanel::default()
-        .frame(egui::Frame::NONE.fill(BG).inner_margin(0))
+        .frame(egui::Frame::NONE.fill(t.bg).inner_margin(0))
         .show(ui, |ui| {
             if app.editor.find_open {
                 find_bar(app, ui);
@@ -635,21 +572,25 @@ fn body(app: &mut TypesetApp, ui: &mut Ui) {
 }
 
 fn gutter(ui: &mut Ui, app: &mut TypesetApp) {
+    let t = Tokens::get(ui.ctx());
     let rows = app.source.lines().count().max(1);
     let pitch = app.row_pitch;
     let (r, _) = ui.allocate_exact_size(vec2(46.0, rows as f32 * pitch), Sense::hover());
     let p = ui.painter();
     let font = FontId::new(app.editor.size * 0.85, FontFamily::Monospace);
+    // gutter background + hairline right edge
+    p.rect_filled(r, 0.0, t.panel);
+    p.line_segment([pos2(r.max.x, r.min.y), pos2(r.max.x, r.max.y)], Stroke::new(1.0, t.border));
     for i in 1..=rows {
-        p.text(pos2(r.max.x - 8.0, r.min.y + i as f32 * pitch - pitch * 0.5), Align2::RIGHT_CENTER, format!("{i}"), font.clone(), FAINT);
+        p.text(pos2(r.max.x - 8.0, r.min.y + i as f32 * pitch - pitch * 0.5), Align2::RIGHT_CENTER, format!("{i}"), font.clone(), t.text_tertiary);
     }
-    p.line_segment([pos2(r.max.x, r.min.y), pos2(r.max.x, r.max.y)], Stroke::new(1.0, BORDER));
 }
 
 fn find_bar(app: &mut TypesetApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
     ui.horizontal(|ui| {
         ui.add_space(6.0);
-        ui.label(egui::RichText::new("Find").small().color(DIM));
+        ui.label(egui::RichText::new("Find").small().color(t.text_secondary));
         let mut q = app.editor.find.clone();
         let resp = ui.add(egui::TextEdit::singleline(&mut q).hint_text("search the source…").desired_width(170.0));
         if resp.changed() {
@@ -660,15 +601,25 @@ fn find_bar(app: &mut TypesetApp, ui: &mut Ui) {
         } else {
             app.source.matches(&app.editor.find).count()
         };
-        ui.label(egui::RichText::new(format!("{n} matches")).small().color(FAINT));
-        if ui.small_button("↑").on_hover_text("Previous match").clicked() {
+        ui.label(egui::RichText::new(format!("{n} matches")).small().color(t.text_secondary));
+        // match navigation painted from the shared vector icon set (no tofu)
+        let fbtn = |ui: &mut Ui, icon: &str, tip: &str| -> bool {
+            let (r, resp) = ui.allocate_exact_size(vec2(24.0, 20.0), Sense::click());
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tip));
+            if resp.hovered() {
+                ui.painter().rect_filled(r, 5.0, t.hover);
+            }
+            paint_icon(ui.painter(), r, icon, t.text, t.panel);
+            resp.on_hover_text(tip).clicked()
+        };
+        if fbtn(ui, "arrow-up", "Previous match") {
             app.find_jump(ui.ctx(), false);
         }
-        if ui.small_button("↓").on_hover_text("Next match").clicked() {
+        if fbtn(ui, "arrow-down", "Next match") {
             app.find_jump(ui.ctx(), true);
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.small_button("✕").clicked() {
+            if fbtn(ui, "close", "Close find") {
                 app.editor.find_open = false;
             }
         });
@@ -690,25 +641,26 @@ fn caret(ctx: &Context, src: &str) -> (usize, usize) {
 // ── status bar ───────────────────────────────────────────────────────────────
 
 fn status_bar(app: &mut TypesetApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
     egui::Panel::bottom("ts_status")
         .exact_size(24.0)
-        .frame(egui::Frame::NONE.fill(PANEL).inner_margin(Margin { left: 12, right: 12, top: 0, bottom: 0 }).stroke(Stroke::new(1.0, BORDER)))
+        .frame(egui::Frame::NONE.fill(t.panel).inner_margin(Margin { left: 12, right: 12, top: 0, bottom: 0 }).stroke(Stroke::new(1.0, t.border)))
         .show(ui, |ui| {
             let full = ui.max_rect();
             let cy = full.center().y;
             let p = ui.painter();
             let f = FontId::proportional(11.0);
-            p.text(pos2(full.min.x, cy), Align2::LEFT_CENTER, format!("Ln {}, Col {}", app.caret.0, app.caret.1), f.clone(), DIM);
+            p.text(pos2(full.min.x, cy), Align2::LEFT_CENTER, format!("Ln {}, Col {}", app.caret.0, app.caret.1), f.clone(), t.text_secondary);
             p.text(
                 pos2(full.center().x, cy),
                 Align2::CENTER_CENTER,
                 format!("{} words · {} pages", model::word_count(&app.source), app.pages.len()),
                 f.clone(),
-                DIM,
+                t.text_secondary,
             );
             let name = app.path.clone().unwrap_or_else(|| "Untitled.typ".into());
             let dot = if app.dirty { " ●" } else { "" };
-            p.text(pos2(full.max.x, cy), Align2::RIGHT_CENTER, format!("{name}{dot} · Typeset"), f, DIM);
+            p.text(pos2(full.max.x, cy), Align2::RIGHT_CENTER, format!("{name}{dot} · Typeset"), f, t.text_secondary);
         });
 }
 

@@ -547,7 +547,7 @@ pub fn paint_vertex(p: &Painter, r: Rect, st: &str, look: &Look, value: &str, xf
         "info" => info_sign(p, r, look, "i"),
         "question" => info_sign(p, r, look, "?"),
         "checkMark" => info_sign(p, r, look, "✓"),
-        "crossMark" => info_sign(p, r, look, "✕"),
+        "crossMark" => cross_mark(p, r, look),
         "firstAid" => first_aid(p, r, look, xf),
         "divider" | "" => {}
         _ => plain_rect(p, r, st, look, xf),
@@ -1645,6 +1645,17 @@ fn info_sign(p: &Painter, r: Rect, look: &Look, mark: &str) {
     ellipse(p, r, &Xf::default(), look);
     let font = FontId::proportional(r.height() * 0.55);
     p.text(r.center(), Align2::CENTER_CENTER, mark, font, look.text);
+}
+
+/// Circle with a hand-drawn X — vector strokes instead of the tofu-prone
+/// ✕ (U+2715) text glyph, which the installed fonts can't render.
+fn cross_mark(p: &Painter, r: Rect, look: &Look) {
+    ellipse(p, r, &Xf::default(), look);
+    let k = r.width().min(r.height()) * 0.2;
+    let st = Stroke::new((r.width().min(r.height()) * 0.08).max(1.6), look.text);
+    let c = r.center();
+    p.line_segment([c - Vec2::new(k, k), c + Vec2::new(k, k)], st);
+    p.line_segment([c + Vec2::new(k, -k), c - Vec2::new(k, -k)], st);
 }
 
 fn first_aid(p: &Painter, r: Rect, look: &Look, xf: &Xf) {

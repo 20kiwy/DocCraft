@@ -191,10 +191,29 @@ a native Windows build with NASM is the upstream-faithful alternative.
 | Sheets/GridCraft | v0.8.0 | ~75% | functions 98.1% |
 | Slides/DeckCraft | v0.8.0 | ~55% | real app embedded |
 | Reader/PdfCraft | v0.9.0 | ~50% | real app embedded |
-| Design/FigCraft | v0.7.0 | ~53% | 10th system fully embedded |
-| Draw/drawio-native | 3.2.0 | — | connections/arrows/export per JS spec |
-| Vector (Illustrator) | 3.2.0 | — | ported from DocCraft 2.5 to egui 0.36 |
-| Markdown | 3.1.0 | — | wordcraft-anatomy chrome + settings |
-| Typeset | 3.1.0 | — | pagination + real PDF |
-| Notes | 3.2.0 | — | new notebook craft |
+| Design/FigCraft | v0.7.0 | ~53% | 9th system fully embedded |
+| Draw/drawio-native | 3.4.0 | — | full GraphEditor + drawio-exact connections (Vector removed in 3.3) |
+| Markdown | 3.4.0 | — | wordcraft-anatomy chrome on UI3 tokens + page-card preview |
+| Typeset | 3.4.0 | — | pagination + real PDF on UI3 tokens |
+| Notes | 3.4.0 | — | full ribbon/preview/settings parity + .note JSON persistence |
 | craft-launcher chrome | 0.5.1 (ref) | — | tokens/motion/header copied |
+
+## 3.4.0 — one design language, full GraphEditor
+
+- `crates/theme` (doccraft-theme): FigCraft UI3 light/dark Tokens ported 1:1
+  from `upstream/figcraft/crates/ui-egui/src/theme.rs` — accent #0D99FF,
+  radius-5 widgets, radius-13 windows, soft page shadows, 11px UI text. Every
+  native craft now paints exclusively from these tokens (dark default,
+  ☀/☾ toggle, Light/Dark radio in settings).
+- Draw = full GraphEditor: Arrange + Help menus, File New/Save As/Close,
+  multi-open shape libraries, Scratchpad (auto-add on copy, right-click add,
+  hover ✕ remove), drag shapes from the palette onto the canvas with a ghost
+  preview, page-tab context ops (rename/duplicate/delete/insert), Diagram tab
+  (paper/background/grid) when nothing is selected, toolbar zoom menu.
+- Markdown/Typeset: UI3 restyle; preview/pagination render as page cards on a
+  canvas (white/dark paper + card shadow); DocCraft Blue default accent.
+- Notes rebuilt to full parity: glyph command strip, styled markdown preview
+  on a page card, settings window with accent picker, .note JSON save/load
+  (Ctrl+S) + text import.
+- `.figma` files open via Design (FigCraft); Windows associations refreshed
+  (27 types, stale .vec removed); About window file-type list updated.

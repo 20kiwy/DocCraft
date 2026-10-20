@@ -1,37 +1,56 @@
 //! The settings dialog (the gear in the Quick Access Toolbar): grouped rows for
-//! Typography, Page, Header/Footer and Editor, in the File › Options style.
-//! Every setting lives on the app struct, so it survives craft switches.
+//! Typography, Page, Header/Footer, Editor and Theme, in the File › Options
+//! style. Every setting lives on the app struct, so it survives craft switches.
 
 use crate::layout::{self, NumPos, Paper};
-use crate::ui::{TypesetApp, DIM, TEXT};
-use egui::{Context, FontId, RichText, Ui, vec2};
+use crate::ui::TypesetApp;
+use doccraft_theme::Tokens;
+use egui::{Context, FontId, RichText, Stroke, Ui, vec2};
 
 pub fn show(app: &mut TypesetApp, ctx: &Context) {
+    let t = Tokens::get(ctx);
     let mut open = app.settings_open;
-    egui::Window::new("Typeset Settings")
+    egui::Window::new(RichText::new("Typeset Settings").strong())
         .open(&mut open)
         .collapsible(false)
         .default_width(470.0)
         .default_pos(egui::pos2(320.0, 140.0))
+        .frame(
+            egui::Frame::NONE
+                .fill(t.bg)
+                .stroke(Stroke::new(1.0, t.border))
+                .corner_radius(13)
+                .inner_margin(14),
+        )
         .show(ctx, |ui| {
-            ui.style_mut().spacing.item_spacing.y = 6.0;
-            typography(app, ui);
-            ui.separator();
-            page(app, ui);
-            ui.separator();
-            header_footer(app, ui);
-            ui.separator();
-            editor(app, ui);
+            ui.spacing_mut().item_spacing.y = 8.0;
+            group_card(ui, t, |ui| typography(app, ui));
+            group_card(ui, t, |ui| page(app, ui));
+            group_card(ui, t, |ui| header_footer(app, ui));
+            group_card(ui, t, |ui| editor(app, ui));
+            group_card(ui, t, |ui| theme(app, ui));
         });
     app.settings_open = open;
 }
 
+/// A settings group card: `panel` fill, radius 5, hairline border.
+fn group_card(ui: &mut Ui, t: doccraft_theme::Tokens, add: impl FnOnce(&mut Ui)) {
+    egui::Frame::NONE
+        .fill(t.panel)
+        .corner_radius(5)
+        .stroke(Stroke::new(1.0, t.border))
+        .inner_margin(egui::Margin::same(10))
+        .show(ui, add);
+}
+
 fn section(ui: &mut Ui, title: &str) {
-    ui.label(RichText::new(title).font(FontId::proportional(13.5)).strong().color(TEXT));
+    let t = Tokens::get(ui.ctx());
+    ui.label(RichText::new(title).font(FontId::proportional(13.5)).strong().color(t.text));
 }
 
 fn label(ui: &mut Ui, text: &str) {
-    ui.label(RichText::new(text).small().color(DIM));
+    let t = Tokens::get(ui.ctx());
+    ui.label(RichText::new(text).small().color(t.text_secondary));
 }
 
 fn typography(app: &mut TypesetApp, ui: &mut Ui) {
@@ -209,4 +228,14 @@ fn editor(app: &mut TypesetApp, ui: &mut Ui) {
         });
         ui.end_row();
     });
+}
+
+fn theme(app: &mut TypesetApp, ui: &mut Ui) {
+    section(ui, "Theme");
+    ui.horizontal(|ui| {
+        ui.radio_value(&mut app.dark, false, "Light");
+        ui.radio_value(&mut app.dark, true, "Dark");
+    });
+    let t = Tokens::get(ui.ctx());
+    ui.label(RichText::new("Same toggle as the sun / moon button in the title strip.").small().color(t.text_tertiary));
 }

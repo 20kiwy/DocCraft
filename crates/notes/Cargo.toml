@@ -6,3 +6,7 @@ description = "Native Notes craft for DocCraft: multi-page notebook with markdow
 
 [dependencies]
 egui.workspace = true
+doccraft-theme.workspace = true
+craft-ui.workspace = true
+serde.workspace = true
+serde_json.workspace = true

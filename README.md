@@ -24,14 +24,25 @@ is themed after storytold's own **craft-launcher**.
 | 2 | **Sheets** (GridCraft) | `.xlsx .xls .csv …` | [storytold/gridcraft](https://github.com/storytold/gridcraft) | 0.8.0 | breadth ~75% — functions **98.1%** |
 | 3 | **Slides** (DeckCraft) | `.pptx …` | [storytold/deckcraft](https://github.com/storytold/deckcraft) | 0.8.0 | breadth 84% — ready ~55% |
 | 4 | **Reader** (PdfCraft) | `.pdf` | [storytold/pdfcraft](https://github.com/storytold/pdfcraft) | 0.9.0 | ready ~50% |
-| 5 | **Design** (FigCraft) | `.fig .figcraft .svg` | [storytold/figcraft](https://github.com/storytold/figcraft) | 0.7.0 | menus **100%** — ready ~53% |
-| 6 | **Draw** (drawio-style) | `.drawio .xml` | `crates/drawio` (this repo) | 3.3.0 | native — mxGraph XML round-trip, drawio-exact hover arrows / green connection dots / edge start-end editing, full export |
-| 7 | **Markdown** | `.md .markdown` | `crates/md` (this repo) | 3.3.0 | native — split live preview |
-| 8 | **Typeset** | `.typ .tex` | `crates/typeset` (this repo) | 3.3.0 | native — justified pagination → PDF |
-| 9 | **Notes** | `.note .notes` | `crates/notes` (this repo) | 3.3.0 | native — multi-page notebook |
+| 5 | **Design** (FigCraft) | `.fig .figcraft .figma .svg` | [storytold/figcraft](https://github.com/storytold/figcraft) | 0.7.0 | menus **100%** — ready ~53% |
+| 6 | **Draw** (drawio-style) | `.drawio .xml` | `crates/drawio` (this repo) | 3.4.0 | native — full GraphEditor UI, mxGraph XML round-trip, drawio-exact hover arrows / green connection dots / edge start-end editing, scratchpad + drag-from-palette, full export |
+| 7 | **Markdown** | `.md .markdown` | `crates/md` (this repo) | 3.4.0 | native — split live preview on a page card, shared UI3 design tokens |
+| 8 | **Typeset** | `.typ .tex` | `crates/typeset` (this repo) | 3.4.0 | native — justified pagination → PDF, paginated page cards, shared UI3 design tokens |
+| 9 | **Notes** | `.note .notes` | `crates/notes` (this repo) | 3.4.0 | native — multi-page notebook, styled live preview, settings, .note JSON save/load |
 
 Readiness numbers come from each upstream repo's own `ROADMAP.md` — see
 [`CRAFT-STATUS.md`](CRAFT-STATUS.md) for the full honest table.
+
+### One design language
+
+Since 3.4 every native craft paints with the same design tokens as the
+upstream crafts: the FigCraft UI3 light/dark system lives in
+[`crates/theme`](crates/theme) (shared crate `doccraft-theme`) — accent
+`#0D99FF`, radius-5 widgets, radius-13 windows, soft page shadows — and each
+craft has a ☀/☾ theme toggle. Draw is a full GraphEditor (menus, toolbar,
+searchable shape libraries + Scratchpad with drag-to-canvas, Format panel with
+Diagram/Style/Text/Arrange tabs, page tabs, status bar), and Markdown /
+Typeset / Notes show their output as real page cards on a canvas.
 
 ## Screenshots
 
