@@ -584,6 +584,61 @@ impl Diagram {
 }
 
 impl MxFile {
+    /// A fresh single-page, empty document (File › New / File › Close).
+    pub fn blank() -> Self {
+        Self { diagrams: vec![Diagram::new("Page-1")], active: 0, path: None, dirty: false }
+    }
+
+    /// Clone page `index` and insert the copy right after it ("Duplicate").
+    /// Returns the new page index. Cell ids stay per-diagram, so a whole-page
+    /// clone (including its internal source/target references) is consistent.
+    pub fn duplicate_diagram(&mut self, index: usize) -> usize {
+        let Some(mut copy) = self.diagrams.get(index).cloned() else {
+            return self.active;
+        };
+        let base = if copy.name.is_empty() { format!("Page-{}", index + 1) } else { copy.name.clone() };
+        copy.name = format!("{base} copy");
+        let at = (index + 1).min(self.diagrams.len());
+        self.diagrams.insert(at, copy);
+        self.active = at;
+        self.dirty = true;
+        at
+    }
+
+    /// Insert a new empty page after `index` ("Insert Page After").
+    /// Returns the new page index.
+    pub fn insert_diagram_after(&mut self, index: usize) -> usize {
+        let at = (index + 1).min(self.diagrams.len());
+        let mut n = self.diagrams.len() + 1;
+        while self.diagrams.iter().any(|d| d.name == format!("Page-{n}")) {
+            n += 1;
+        }
+        self.diagrams.insert(at, Diagram::new(format!("Page-{n}")));
+        self.active = at;
+        self.dirty = true;
+        at
+    }
+
+    /// Remove page `index` (never removes the last page). Returns whether the
+    /// page was removed.
+    pub fn remove_diagram(&mut self, index: usize) -> bool {
+        if self.diagrams.len() <= 1 || index >= self.diagrams.len() {
+            return false;
+        }
+        self.diagrams.remove(index);
+        self.active = self.active.min(self.diagrams.len() - 1);
+        self.dirty = true;
+        true
+    }
+
+    /// Rename page `index` (page-tab context menu).
+    pub fn rename_diagram(&mut self, index: usize, name: String) {
+        if let Some(d) = self.diagrams.get_mut(index) {
+            d.name = name;
+            self.dirty = true;
+        }
+    }
+
     /// A small flowchart sample so the craft opens with something alive and
     /// showing off the shape library.
     pub fn sample() -> Self {
