@@ -7,7 +7,7 @@ use crate::parse;
 use crate::preview;
 use crate::ribbon;
 use crate::settings::{self, PreviewPos, Settings};
-use egui::{Align2, Color32, FontId, Id, RichText, Stroke, Ui, Vec2};
+use egui::{Align2, Color32, FontId, Id, Rect, RichText, Stroke, Ui, Vec2, vec2};
 
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -34,6 +34,8 @@ pub struct MdApp {
     pub dirty: bool,
     pub tab: RibbonTab,
     pub settings: Settings,
+    /// Light / dark tokens (default dark); toggled from the title strip or settings.
+    pub dark: bool,
     pub show_settings: bool,
     pub outline_open: bool,
     pub show_find: bool,
@@ -70,6 +72,7 @@ impl MdApp {
             dirty: false,
             tab: RibbonTab::Home,
             settings: Settings::default(),
+            dark: true,
             show_settings: false,
             outline_open: true,
             show_find: false,
@@ -116,7 +119,11 @@ impl MdApp {
     pub fn ui(&mut self, ui: &mut Ui) {
         let ctx = ui.ctx().clone();
         self.pre_edit = self.source.clone();
-        ui.style_mut().visuals = egui::Visuals::dark();
+        // Shared suite design tokens, applied once at the start of every frame.
+        let tokens = if self.dark { doccraft_theme::Tokens::dark() } else { doccraft_theme::Tokens::light() };
+        doccraft_theme::apply(&ctx, tokens);
+        ui.style_mut().visuals = doccraft_theme::visuals(tokens);
+        let t = tokens;
 
         ribbon::title_strip(self, ui);
         ribbon::tab_strip(self, ui);
@@ -129,7 +136,7 @@ impl MdApp {
                     .default_size(300.0)
                     .resizable(true)
                     .size_range(220.0..=560.0)
-                    .frame(egui::Frame::NONE.fill(ribbon::BG).inner_margin(egui::Margin::same(10)).stroke(Stroke::new(1.0, ribbon::BORDER)))
+                    .frame(egui::Frame::NONE.fill(t.canvas).inner_margin(egui::Margin::same(10)).stroke(Stroke::new(1.0, t.border)))
                     .show(ui, |ui| self.right_pane(ui));
             }
             PreviewPos::Bottom => {
@@ -137,16 +144,18 @@ impl MdApp {
                     .default_size(280.0)
                     .resizable(true)
                     .size_range(120.0..=1000.0)
-                    .frame(egui::Frame::NONE.fill(ribbon::BG).inner_margin(egui::Margin::same(10)).stroke(Stroke::new(1.0, ribbon::BORDER)))
+                    .frame(egui::Frame::NONE.fill(t.canvas).inner_margin(egui::Margin::same(10)).stroke(Stroke::new(1.0, t.border)))
                     .show(ui, |ui| {
-                        ui.label(RichText::new("PREVIEW").size(10.0).color(ribbon::WEAK));
+                        ui.label(RichText::new("PREVIEW").size(10.0).color(t.text_secondary));
                         self.preview_scroll(ui);
                     });
             }
             PreviewPos::Off => {}
         }
 
-        self.editor(ui);
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE.fill(t.bg).inner_margin(0))
+            .show(ui, |ui| self.editor(ui));
 
         if self.settings.autosave {
             self.autosave_tick();
@@ -234,23 +243,37 @@ impl MdApp {
             let char_w = mono_char_width(ui, size);
             let content_w = (view.width() - gutter - 24.0).max(40.0);
             let cpr = ((content_w / char_w).floor() as usize).max(1);
-            let mut row = 0.0f32;
+            let t = doccraft_theme::Tokens::get(ui.ctx());
+            // gutter background + hairline right edge
+            ui.painter().rect_filled(Rect::from_min_size(view.left_top(), vec2(gutter, view.height())), 0.0, t.panel);
+            ui.painter().line_segment(
+                [egui::pos2(view.left() + gutter, view.top()), egui::pos2(view.left() + gutter, view.bottom())],
+                Stroke::new(1.0, t.border),
+            );
+            // current-line highlight (translucent hover) when the editor is focused
+            let focused = ui.ctx().memory(|m| m.has_focus(edit_id()));
             let mut y = view.top() - oy;
             for (i, line) in self.source.lines().enumerate() {
                 let rows = if wrap { (((line.chars().count() + 1) as f32 / cpr as f32).ceil() as usize).max(1) } else { 1 };
+                if focused && (i + 1) == self.cursor.0 && y >= view.top() - line_h && y <= view.bottom() {
+                    let hl = Color32::from_rgba_unmultiplied(t.hover.r(), t.hover.g(), t.hover.b(), 120);
+                    ui.painter().rect_filled(
+                        Rect::from_min_max(egui::pos2(view.left() + gutter, y), egui::pos2(view.right(), y + rows as f32 * line_h)),
+                        0.0,
+                        hl,
+                    );
+                }
                 if y >= view.top() - line_h && y <= view.bottom() {
                     ui.painter().text(
                         egui::pos2(view.left() + gutter - 10.0, y),
                         Align2::RIGHT_TOP,
                         (i + 1).to_string(),
                         FontId::monospace(size - 2.5),
-                        ribbon::DIM,
+                        t.text_tertiary,
                     );
                 }
                 y += rows as f32 * line_h;
-                row += rows as f32;
             }
-            let _ = row;
         }
     }
 
@@ -265,8 +288,9 @@ impl MdApp {
         }
         self.preview_scroll(ui);
         // Document + Export pinned to the bottom of the pane
+        let t = doccraft_theme::Tokens::get(ui.ctx());
         egui::Panel::bottom("md_pane_tools")
-            .frame(egui::Frame::NONE.fill(ribbon::BG).inner_margin(egui::Margin { left: 0, right: 0, top: 6, bottom: 0 }))
+            .frame(egui::Frame::NONE.fill(t.canvas).inner_margin(egui::Margin { left: 0, right: 0, top: 6, bottom: 0 }))
             .show(ui, |ui| {
                 ui.separator();
                 ui.add_space(4.0);
@@ -290,13 +314,14 @@ impl MdApp {
     // ── status bar ───────────────────────────────────────────────────────────
 
     fn status_bar(&mut self, ui: &mut Ui) {
+        let t = doccraft_theme::Tokens::get(ui.ctx());
         egui::Panel::bottom("md_status")
             .exact_size(ribbon::STATUS_H)
             .frame(
                 egui::Frame::NONE
-                    .fill(ribbon::TITLE)
+                    .fill(t.panel)
                     .inner_margin(egui::Margin { left: 12, right: 12, top: 0, bottom: 0 })
-                    .stroke(Stroke::new(1.0, ribbon::BORDER)),
+                    .stroke(Stroke::new(1.0, t.border)),
             )
             .show(ui, |ui| {
                 ui.horizontal_centered(|ui| {
@@ -309,17 +334,17 @@ impl MdApp {
                         ui.label(
                             RichText::new(format!("Ln {}, Col {}{}", self.cursor.0, self.cursor.1, sel))
                                 .small()
-                                .color(ribbon::WEAK),
+                                .color(t.text_secondary),
                         );
                     }
-                    ui.label(RichText::new(format!("{} words · {} chars", parse::word_count(&self.source), self.source.chars().count())).small().color(ribbon::DIM));
+                    ui.label(RichText::new(format!("{} words · {} chars", parse::word_count(&self.source), self.source.chars().count())).small().color(t.text_secondary));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(RichText::new("Markdown").small().color(ribbon::DIM));
+                        ui.label(RichText::new("Markdown").small().color(t.text_tertiary));
                         if self.dirty {
                             ui.label(RichText::new("●").small().color(self.settings.accent.color()));
                         }
                         let name = self.path.clone().unwrap_or_else(|| "Untitled.md".into());
-                        ui.label(RichText::new(name).small().color(ribbon::WEAK));
+                        ui.label(RichText::new(name).small().color(t.text_secondary));
                     });
                 });
             });
@@ -328,31 +353,32 @@ impl MdApp {
     // ── find & replace ───────────────────────────────────────────────────────
 
     fn find_bar(&mut self, ctx: &egui::Context) {
+        let t = doccraft_theme::Tokens::get(ctx);
         egui::Area::new(Id::new("md_find_bar"))
             .order(egui::Order::Foreground)
             .anchor(Align2::RIGHT_TOP, [-14.0, ribbon::TITLE_H + ribbon::TABS_H + ribbon::RIBBON_H + 12.0])
             .show(ctx, |ui| {
                 egui::Frame::NONE
-                    .fill(ribbon::CARD)
-                    .stroke(Stroke::new(1.0, ribbon::BORDER))
+                    .fill(t.panel)
+                    .stroke(Stroke::new(1.0, t.border))
                     .corner_radius(6)
                     .inner_margin(8)
                     .show(ui, |ui| {
                         ui.spacing_mut().item_spacing = Vec2::new(6.0, 4.0);
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new("Find").small().color(ribbon::WEAK));
+                            ui.label(RichText::new("Find").small().color(t.text_secondary));
                             ui.add(egui::TextEdit::singleline(&mut self.find).desired_width(150.0).font(FontId::proportional(12.0)));
                             let matches = if self.find.is_empty() { 0 } else { self.source.matches(&self.find).count() };
-                            ui.label(RichText::new(format!("{matches}")).small().color(ribbon::DIM));
+                            ui.label(RichText::new(format!("{matches}")).small().color(t.text_secondary));
                             if ui.add(egui::Button::new("Next").small()).clicked() {
                                 self.find_next(ctx);
                             }
-                            if ui.add(egui::Button::new("✕").small()).clicked() {
+                            if ui.add(egui::Button::new("×").small()).clicked() {
                                 self.show_find = false;
                             }
                         });
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new("Replace").small().color(ribbon::WEAK));
+                            ui.label(RichText::new("Replace").small().color(t.text_secondary));
                             ui.add(egui::TextEdit::singleline(&mut self.replace).desired_width(150.0).font(FontId::proportional(12.0)));
                             if ui.add(egui::Button::new("Replace").small()).clicked() {
                                 self.replace_one(ctx);

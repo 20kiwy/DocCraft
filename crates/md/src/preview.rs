@@ -5,143 +5,152 @@
 
 use crate::model::{Block, Inline};
 use crate::parse;
-use crate::ribbon::{accent, BORDER, CARD, CODE_BG, DIM, LINK, TEXT, WEAK};
+use crate::ribbon::accent;
 use crate::ui::MdApp;
+use doccraft_theme::{Tokens, card_shadow};
 use egui::{Align, Align2, Color32, CornerRadius, FontId, Frame, RichText, Stroke, TextFormat, Ui, Vec2, WidgetText};
 
 // ── preview renderer ─────────────────────────────────────────────────────────
 
-/// Rendered preview of the parsed document, in the preview font size, with
-/// the settings accent on headings and links and on code cards per setting.
+/// Rendered preview of the parsed document: a centered page card (max 680 px)
+/// on the canvas, with the settings accent on headings/links and token colors
+/// everywhere else.
 pub fn preview(app: &MdApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
     let blocks = parse::parse(&app.source);
     let size = app.settings.preview_size;
     let a = accent(app);
-    let body = Color32::from_rgb(0xd6, 0xd8, 0xde);
     if blocks.is_empty() {
         ui.label(RichText::new("Nothing to preview yet — type Markdown on the left.").weak());
         return;
     }
-    for b in blocks {
-        match b {
-            Block::Heading { level, text } => {
-                let s = match level { 1 => size + 11.0, 2 => size + 6.0, 3 => size + 3.0, 4 => size + 1.0, _ => size };
-                ui.add_space(8.0);
-                let mut job = egui::text::LayoutJob::default();
-                push_inlines(&mut job, &text, Run { size: s, color: a, bold: true, ..Run::default() });
-                job.wrap.max_width = ui.available_width();
-                ui.add(egui::Label::new(WidgetText::LayoutJob(std::sync::Arc::new(job))));
-                if level <= 2 {
-                    ui.add_space(2.0);
-                    let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), egui::Sense::hover());
-                    ui.painter().line_segment([r.left_center(), r.right_center()], Stroke::new(1.0, a.gamma_multiply(0.4)));
-                }
-            }
-            Block::Paragraph(inl) => {
-                ui.add_space(3.0);
-                let mut job = egui::text::LayoutJob::default();
-                push_inlines(&mut job, &inl, Run { size, color: body, ..Run::default() });
-                job.wrap.max_width = ui.available_width();
-                ui.add(egui::Label::new(WidgetText::LayoutJob(std::sync::Arc::new(job))));
-            }
-            Block::Bullet(items) => {
-                ui.add_space(2.0);
-                for item in &items {
-                    list_row(ui, "•", WEAK, |ui| job_label(ui, item, Run { size, color: body, ..Run::default() }));
-                }
-            }
-            Block::Numbered(items) => {
-                ui.add_space(2.0);
-                for (i, item) in items.iter().enumerate() {
-                    let n = format!("{}.", i + 1);
-                    list_row(ui, &n, WEAK, |ui| job_label(ui, item, Run { size, color: body, ..Run::default() }));
-                }
-            }
-            Block::Task(items) => {
-                ui.add_space(2.0);
-                for (done, item) in &items {
-                    list_row(ui, "", WEAK, |ui| {
-                        let (r, _) = ui.allocate_exact_size(Vec2::new(13.0, 13.0), egui::Sense::hover());
-                        let rr = r.shrink2(Vec2::new(1.5, 4.0));
-                        if *done {
-                            ui.painter().rect_filled(rr, 3.0, a);
-                            ui.painter().text(rr.center(), Align2::CENTER_CENTER, "✓", FontId::proportional(9.5), Color32::WHITE);
-                        } else {
-                            ui.painter().rect_stroke(rr, 3.0, Stroke::new(1.2, WEAK), egui::StrokeKind::Inside);
+    // the page card: white paper in the light theme, editor-gray in dark
+    let card = if t.dark { Color32::from_rgb(0x25, 0x25, 0x26) } else { Color32::WHITE };
+    let inner_w = (ui.available_width().min(680.0) - 80.0).max(220.0);
+    ui.vertical_centered(|ui| {
+        Frame::NONE
+            .fill(card)
+            .corner_radius(2)
+            .inner_margin(40)
+            .shadow(card_shadow(&t))
+            .show(ui, |ui| {
+                ui.set_width(inner_w);
+                for b in blocks {
+                    match b {
+                        Block::Heading { level, text } => {
+                            let s = match level { 1 => size + 11.0, 2 => size + 6.0, 3 => size + 3.0, 4 => size + 1.0, _ => size };
+                            ui.add_space(8.0);
+                            let mut job = egui::text::LayoutJob::default();
+                            push_inlines(&mut job, &text, Run { size: s, color: a, ..Run::default() }, t);
+                            job.wrap.max_width = ui.available_width();
+                            ui.add(egui::Label::new(WidgetText::LayoutJob(std::sync::Arc::new(job))));
+                            if level <= 2 {
+                                ui.add_space(2.0);
+                                let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), egui::Sense::hover());
+                                ui.painter().line_segment([r.left_center(), r.right_center()], Stroke::new(1.0, a));
+                            }
                         }
-                        let mut run = Run { size, color: body, ..Run::default() };
-                        if *done {
-                            run.strike = true;
-                            run.color = WEAK;
+                        Block::Paragraph(inl) => {
+                            ui.add_space(3.0);
+                            let mut job = egui::text::LayoutJob::default();
+                            push_inlines(&mut job, &inl, Run { size, color: t.text, ..Run::default() }, t);
+                            job.wrap.max_width = ui.available_width();
+                            ui.add(egui::Label::new(WidgetText::LayoutJob(std::sync::Arc::new(job))));
                         }
-                        job_label(ui, item, run);
-                    });
-                }
-            }
-            Block::Quote(paras) => {
-                ui.add_space(4.0);
-                let w = ui.available_width();
-                let h = paras.len() as f32 * (size * 1.5) + 8.0;
-                let (r, _) = ui.allocate_exact_size(Vec2::new(w, h.max(20.0)), egui::Sense::hover());
-                let bar = egui::Rect::from_min_size(r.left_top() + Vec2::new(0.0, 3.0), Vec2::new(3.0, h - 6.0));
-                ui.painter().rect_filled(bar, 2.0, a.gamma_multiply(0.55));
-                let inner = r.shrink2(Vec2::new(10.0, 0.0));
-                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).id_salt("md_quote"));
-                for p in &paras {
-                    let mut job = egui::text::LayoutJob::default();
-                    push_inlines(&mut job, p, Run { size: size - 0.5, color: WEAK, italic: true, ..Run::default() });
-                    job.wrap.max_width = child.available_width();
-                    child.add(egui::Label::new(WidgetText::LayoutJob(std::sync::Arc::new(job))));
-                }
-            }
-            Block::Code { lang, code } => {
-                ui.add_space(4.0);
-                let rows = code.lines().count().max(1);
-                let w = ui.available_width();
-                let h = 10.0 + rows as f32 * (size * 1.35) + if lang.is_empty() { 0.0 } else { 16.0 };
-                Frame::NONE
-                    .fill(if app.settings.dark_code { CODE_BG } else { Color32::from_rgb(0xf2, 0xf2, 0xf5) })
-                    .stroke(Stroke::new(1.0, BORDER))
-                    .corner_radius(6)
-                    .inner_margin(10)
-                    .show(ui, |ui| {
-                        ui.set_width(w - 22.0);
-                        if !lang.is_empty() {
-                            ui.label(
-                                RichText::new(lang.clone())
-                                    .small()
-                                    .color(if app.settings.dark_code { DIM } else { WEAK }),
-                            );
+                        Block::Bullet(items) => {
+                            ui.add_space(2.0);
+                            for item in &items {
+                                list_row(ui, "•", t.text_secondary, |ui| job_label(ui, item, Run { size, color: t.text, ..Run::default() }, t));
+                            }
                         }
-                        let mut job = egui::text::LayoutJob::default();
-                        job.append(
-                            &code,
-                            0.0,
-                            TextFormat::simple(FontId::monospace(size - 1.5), if app.settings.dark_code { Color32::from_rgb(0xd8, 0xde, 0xe4) } else { Color32::from_rgb(0x26, 0x26, 0x2c) }),
-                        );
-                        job.wrap.max_width = ui.available_width();
-                        ui.add(egui::Label::new(WidgetText::LayoutJob(std::sync::Arc::new(job))));
-                    });
-            }
-            Block::Rule => {
-                ui.add_space(6.0);
-                let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 2.0), egui::Sense::hover());
-                ui.painter().line_segment([r.left_center(), r.right_center()], Stroke::new(1.5, BORDER));
-                ui.add_space(4.0);
-            }
-            Block::Table { head, rows } => table(app, ui, &head, &rows),
-            Block::FootnoteDef { label, text } => {
-                ui.add_space(2.0);
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("^{label}")).small().color(accent(app)));
-                    let mut job = egui::text::LayoutJob::default();
-                    push_inlines(&mut job, &text, Run { size: size - 2.5, color: DIM, ..Run::default() });
-                    job.wrap.max_width = ui.available_width();
-                    ui.add(egui::Label::new(WidgetText::LayoutJob(std::sync::Arc::new(job))));
-                });
-            }
-        }
-    }
+                        Block::Numbered(items) => {
+                            ui.add_space(2.0);
+                            for (i, item) in items.iter().enumerate() {
+                                let n = format!("{}.", i + 1);
+                                list_row(ui, &n, t.text_secondary, |ui| job_label(ui, item, Run { size, color: t.text, ..Run::default() }, t));
+                            }
+                        }
+                        Block::Task(items) => {
+                            ui.add_space(2.0);
+                            for (done, item) in &items {
+                                list_row(ui, "", t.text_secondary, |ui| {
+                                    let (r, _) = ui.allocate_exact_size(Vec2::new(13.0, 13.0), egui::Sense::hover());
+                                    let rr = r.shrink2(Vec2::new(1.5, 4.0));
+                                    if *done {
+                                        ui.painter().rect_filled(rr, 3.0, a);
+                                        ui.painter().text(rr.center(), Align2::CENTER_CENTER, "✓", FontId::proportional(9.5), Color32::WHITE);
+                                    } else {
+                                        ui.painter().rect_stroke(rr, 3.0, Stroke::new(1.2, t.text_secondary), egui::StrokeKind::Inside);
+                                    }
+                                    let mut run = Run { size, color: t.text, ..Run::default() };
+                                    if *done {
+                                        run.strike = true;
+                                        run.color = t.text_secondary;
+                                    }
+                                    job_label(ui, item, run, t);
+                                });
+                            }
+                        }
+                        Block::Quote(paras) => {
+                            ui.add_space(4.0);
+                            let w = ui.available_width();
+                            let h = paras.len() as f32 * (size * 1.5) + 8.0;
+                            let (r, _) = ui.allocate_exact_size(Vec2::new(w, h.max(20.0)), egui::Sense::hover());
+                            let bar = egui::Rect::from_min_size(r.left_top() + Vec2::new(0.0, 3.0), Vec2::new(3.0, h - 6.0));
+                            ui.painter().rect_filled(bar, 2.0, a);
+                            let inner = r.shrink2(Vec2::new(10.0, 0.0));
+                            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).id_salt("md_quote"));
+                            for p in &paras {
+                                let mut job = egui::text::LayoutJob::default();
+                                push_inlines(&mut job, p, Run { size: size - 0.5, color: t.text_secondary, italic: true, ..Run::default() }, t);
+                                job.wrap.max_width = child.available_width();
+                                child.add(egui::Label::new(WidgetText::LayoutJob(std::sync::Arc::new(job))));
+                            }
+                        }
+                        Block::Code { lang, code } => {
+                            ui.add_space(4.0);
+                            let w = ui.available_width();
+                            Frame::NONE
+                                .fill(if app.settings.dark_code { t.field } else { Color32::from_rgb(0xf2, 0xf2, 0xf5) })
+                                .stroke(Stroke::new(1.0, t.border))
+                                .corner_radius(6)
+                                .inner_margin(10)
+                                .show(ui, |ui| {
+                                    ui.set_width(w - 22.0);
+                                    if !lang.is_empty() {
+                                        ui.label(RichText::new(lang.clone()).small().color(t.text_secondary));
+                                    }
+                                    let mut job = egui::text::LayoutJob::default();
+                                    job.append(
+                                        &code,
+                                        0.0,
+                                        TextFormat::simple(FontId::monospace(size - 1.5), if app.settings.dark_code { t.text } else { Color32::from_rgb(0x26, 0x26, 0x2c) }),
+                                    );
+                                    job.wrap.max_width = ui.available_width();
+                                    ui.add(egui::Label::new(WidgetText::LayoutJob(std::sync::Arc::new(job))));
+                                });
+                        }
+                        Block::Rule => {
+                            ui.add_space(6.0);
+                            let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 2.0), egui::Sense::hover());
+                            ui.painter().line_segment([r.left_center(), r.right_center()], Stroke::new(1.5, t.border));
+                            ui.add_space(4.0);
+                        }
+                        Block::Table { head, rows } => table(app, ui, &head, &rows, t),
+                        Block::FootnoteDef { label, text } => {
+                            ui.add_space(2.0);
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new(format!("^{label}")).small().color(accent(app)));
+                                let mut job = egui::text::LayoutJob::default();
+                                push_inlines(&mut job, &text, Run { size: size - 2.5, color: t.text_secondary, ..Run::default() }, t);
+                                job.wrap.max_width = ui.available_width();
+                                ui.add(egui::Label::new(WidgetText::LayoutJob(std::sync::Arc::new(job))));
+                            });
+                        }
+                    }
+                }
+            });
+    });
 }
 
 fn list_row(ui: &mut Ui, bullet: &str, color: Color32, add: impl FnOnce(&mut Ui)) {
@@ -154,11 +163,12 @@ fn list_row(ui: &mut Ui, bullet: &str, color: Color32, add: impl FnOnce(&mut Ui)
     });
 }
 
-fn table(app: &MdApp, ui: &mut Ui, head: &[String], rows: &[Vec<String>]) {
+fn table(app: &MdApp, ui: &mut Ui, head: &[String], rows: &[Vec<String>], t: Tokens) {
     ui.add_space(5.0);
+    ui.visuals_mut().faint_bg_color = t.hover; // striped rows
     Frame::NONE
-        .fill(CARD)
-        .stroke(Stroke::new(1.0, BORDER))
+        .fill(t.field)
+        .stroke(Stroke::new(1.0, t.border))
         .corner_radius(6)
         .inner_margin(0)
         .show(ui, |ui| {
@@ -174,7 +184,7 @@ fn table(app: &MdApp, ui: &mut Ui, head: &[String], rows: &[Vec<String>]) {
                     ui.end_row();
                     for row in rows {
                         for c in row {
-                            ui.label(RichText::new(c.clone()).size(app.settings.preview_size - 1.0).color(TEXT));
+                            ui.label(RichText::new(c.clone()).size(app.settings.preview_size - 1.0).color(t.text));
                         }
                         ui.end_row();
                     }
@@ -188,14 +198,13 @@ fn table(app: &MdApp, ui: &mut Ui, head: &[String], rows: &[Vec<String>]) {
 struct Run {
     size: f32,
     color: Color32,
-    bold: bool,
     italic: bool,
     strike: bool,
 }
 
 impl Default for Run {
     fn default() -> Self {
-        Self { size: 14.0, color: TEXT, bold: false, italic: false, strike: false }
+        Self { size: 14.0, color: Color32::WHITE, italic: false, strike: false }
     }
 }
 
@@ -211,47 +220,48 @@ fn text_fmt(r: Run, mono: bool) -> TextFormat {
     }
 }
 
-fn push_inlines(job: &mut egui::text::LayoutJob, inl: &[Inline], r: Run) {
+fn push_inlines(job: &mut egui::text::LayoutJob, inl: &[Inline], r: Run, t: Tokens) {
     for i in inl {
         match i {
-            Inline::Text(t) => job.append(t, 0.0, text_fmt(r, false)),
-            Inline::Bold(inner) => push_inlines(job, inner, Run { bold: true, ..r }),
-            Inline::Italic(inner) => push_inlines(job, inner, Run { italic: true, ..r }),
-            Inline::Strike(inner) => push_inlines(job, inner, Run { strike: true, ..r }),
+            Inline::Text(tt) => job.append(tt, 0.0, text_fmt(r, false)),
+            Inline::Bold(inner) => push_inlines(job, inner, r, t),
+            Inline::Italic(inner) => push_inlines(job, inner, Run { italic: true, ..r }, t),
+            Inline::Strike(inner) => push_inlines(job, inner, Run { strike: true, ..r }, t),
             Inline::Code(c) => {
                 let mut f = text_fmt(r, true);
-                f.background = Color32::from_rgb(0x30, 0x30, 0x38);
+                f.background = t.field;
                 job.append(c, 0.0, f);
             }
             Inline::Link { label, .. } => {
                 let mut f = text_fmt(r, false);
-                f.color = LINK;
-                f.underline = Stroke::new(1.0, LINK);
+                f.color = t.accent_text;
+                f.underline = Stroke::new(1.0, t.accent_text);
                 job.append(label, 0.0, f);
             }
             Inline::FootnoteRef(l) => {
                 let mut f = text_fmt(r, false);
                 f.font_id = FontId::proportional(r.size - 3.5);
                 f.valign = Align::BOTTOM;
-                f.color = LINK;
+                f.color = t.accent_text;
                 job.append(&format!("[^{l}]"), 0.0, f);
             }
         }
     }
 }
 
-fn job_label(ui: &mut Ui, inl: &[Inline], r: Run) {
+fn job_label(ui: &mut Ui, inl: &[Inline], r: Run, t: Tokens) {
     let mut job = egui::text::LayoutJob::default();
-    push_inlines(&mut job, inl, r);
+    push_inlines(&mut job, inl, r, t);
     job.wrap.max_width = ui.available_width();
     ui.add(egui::Label::new(WidgetText::LayoutJob(std::sync::Arc::new(job))));
 }
 
 // ── right pane sections ──────────────────────────────────────────────────────
 
-/// Section caption in the right pane (small uppercase, weak).
+/// Section caption in the right pane (small uppercase, secondary).
 fn pane_title(ui: &mut Ui, title: &str) {
-    ui.label(RichText::new(title.to_uppercase()).size(10.0).color(WEAK));
+    let t = Tokens::get(ui.ctx());
+    ui.label(RichText::new(title.to_uppercase()).size(10.0).color(t.text_secondary));
     ui.add_space(2.0);
 }
 
@@ -259,9 +269,10 @@ fn pane_title(ui: &mut Ui, title: &str) {
 /// holding the caret is highlighted.
 pub fn outline_pane(app: &mut MdApp, ui: &mut Ui) {
     pane_title(ui, "Outline");
+    let t = Tokens::get(ui.ctx());
     let headings = parse::outline(&app.source);
     if headings.is_empty() {
-        ui.label(RichText::new("No headings yet. Add `#`, `##`, `###` lines to build an outline.").small().color(DIM));
+        ui.label(RichText::new("No headings yet. Add `#`, `##`, `###` lines to build an outline.").small().color(t.text_tertiary));
         return;
     }
     let cur = headings
@@ -279,7 +290,7 @@ pub fn outline_pane(app: &mut MdApp, ui: &mut Ui) {
                 ui.add_space(h.level.saturating_sub(1) as f32 * 14.0);
                 let mut text = RichText::new(h.text.clone())
                     .size(12.0)
-                    .color(if selected { a } else if h.level == 1 { TEXT } else { WEAK });
+                    .color(if selected { a } else if h.level == 1 { t.text } else { t.text_secondary });
                 if h.level <= 2 {
                     text = text.strong();
                 }
@@ -296,6 +307,7 @@ pub fn outline_pane(app: &mut MdApp, ui: &mut Ui) {
 /// Document statistics: words, characters, reading time, headings.
 pub fn document_pane(app: &MdApp, ui: &mut Ui) {
     pane_title(ui, "Document");
+    let t = Tokens::get(ui.ctx());
     let (words, chars, heads) = parse::stats(&app.source);
     egui::Grid::new("md_doc_stats").num_columns(2).spacing(Vec2::new(10.0, 2.0)).show(ui, |ui| {
         for (label, value) in [
@@ -304,8 +316,8 @@ pub fn document_pane(app: &MdApp, ui: &mut Ui) {
             ("reading", format!("{} min", parse::reading_min(words))),
             ("headings", heads.to_string()),
         ] {
-            ui.label(RichText::new(value).strong().size(12.5).color(TEXT));
-            ui.label(RichText::new(label).small().color(DIM));
+            ui.label(RichText::new(value).strong().size(12.5).color(t.text));
+            ui.label(RichText::new(label).small().color(t.text_tertiary));
             ui.end_row();
         }
     });
@@ -314,12 +326,13 @@ pub fn document_pane(app: &MdApp, ui: &mut Ui) {
 /// Export section: Save .md, Export .html, Export .pdf (pointer to Typeset).
 pub fn export_pane(app: &mut MdApp, ui: &mut Ui) {
     pane_title(ui, "Export");
+    let t = Tokens::get(ui.ctx());
     ui.horizontal(|ui| {
         if ui
             .add(
-                egui::Button::new(RichText::new("💾 Save .md").size(11.5).color(TEXT))
-                    .fill(CARD)
-                    .corner_radius(CornerRadius::same(4)),
+                egui::Button::new(RichText::new("Save .md").size(11.5).color(t.text))
+                    .fill(t.field)
+                    .corner_radius(CornerRadius::same(5)),
             )
             .on_hover_text("Write the document back to its file")
             .clicked()
@@ -328,9 +341,9 @@ pub fn export_pane(app: &mut MdApp, ui: &mut Ui) {
         }
         if ui
             .add(
-                egui::Button::new(RichText::new("Export .html").size(11.5).color(TEXT))
-                    .fill(CARD)
-                    .corner_radius(CornerRadius::same(4)),
+                egui::Button::new(RichText::new("Export .html").size(11.5).color(t.text))
+                    .fill(t.field)
+                    .corner_radius(CornerRadius::same(5)),
             )
             .on_hover_text("Render the document to a small standalone HTML file")
             .clicked()
@@ -339,7 +352,7 @@ pub fn export_pane(app: &mut MdApp, ui: &mut Ui) {
         }
     });
     ui.add(
-        egui::Button::new(RichText::new("Export .pdf — via the Typeset craft").size(10.5).color(DIM))
+        egui::Button::new(RichText::new("Export .pdf — via the Typeset craft").size(10.5).color(t.text_tertiary))
             .fill(egui::Color32::TRANSPARENT)
             .sense(egui::Sense::hover()),
     )
