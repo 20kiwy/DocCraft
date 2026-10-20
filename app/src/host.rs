@@ -178,7 +178,7 @@ impl Craft {
             Craft::Grid => "Spreadsheets · .xlsx .csv",
             Craft::Deck => "Presentations · .pptx",
             Craft::Pdf => "PDF · .pdf",
-            Craft::Fig => "Figma-style · .fig .svg",
+            Craft::Fig => "Figma-style · .fig .figma .svg",
             Craft::Draw => "Diagrams · .drawio",
             Craft::Markdown => "Writing · .md",
             Craft::Typeset => "Typesetting · .typ .tex",
@@ -204,6 +204,8 @@ pub struct HostApp {
     pub toast: Option<(String, f64)>,
     /// queued file open, flushed on the next frame with the real context
     pub pending: Option<(Craft, String, Vec<u8>, String)>,
+    /// craft to switch to on the first frame (--craft=<name>)
+    pending_craft: Option<Craft>,
 }
 
 impl HostApp {
@@ -222,14 +224,35 @@ impl HostApp {
             about_open: false,
             toast: None,
             pending: None,
+            pending_craft: None,
         };
-        // Open paths passed on the command line: `doccraft report.docx plan.drawio`
+        // Command line: file paths open in their craft; `--craft <name>`
+        // starts directly in a craft (Writer/Sheets/Slides/Reader/Design/Draw/
+        // Markdown/Typeset/Notes); `--light` starts the native crafts in the
+        // light theme. `doccraft plan.drawio --craft draw --light`.
+        let mut start_light = false;
         for arg in std::env::args().skip(1) {
             if arg == "--register-associations" {
                 crate::register_associations::run();
                 std::process::exit(0);
             }
+            if arg == "--light" {
+                start_light = true;
+                continue;
+            }
+            if let Some(name) = arg.strip_prefix("--craft=") {
+                if let Some(c) = Craft::ALL.iter().copied().find(|c| c.short().eq_ignore_ascii_case(name)) {
+                    me.pending_craft = Some(c);
+                }
+                continue;
+            }
             me.open_path(&arg);
+        }
+        if start_light {
+            me.draw.dark = false;
+            me.md.dark = false;
+            me.typeset.dark = false;
+            me.notes.dark = false;
         }
         let _ = cc;
         me
@@ -291,7 +314,7 @@ impl HostApp {
             "xlsx" | "xlsm" | "xls" | "ods" | "csv" | "tsv" => (Craft::Grid, String::new()),
             "pptx" | "potx" | "ppsx" => (Craft::Deck, String::new()),
             "pdf" => (Craft::Pdf, String::new()),
-            "fig" | "figcraft" | "svg" => (Craft::Fig, String::new()),
+            "fig" | "figcraft" | "figma" | "svg" => (Craft::Fig, String::new()),
             "drawio" | "xml" => (Craft::Draw, String::new()),
             "md" | "markdown" => (Craft::Markdown, String::new()),
             "typ" | "tex" | "ts" => (Craft::Typeset, String::new()),
@@ -435,6 +458,10 @@ impl eframe::App for HostApp {
 
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        // --craft=<name> from the command line: mount + switch on first frame.
+        if let Some(c) = self.pending_craft.take() {
+            self.switch(c, &ctx);
+        }
         // ArtCraft shell: custom header (logo + window buttons), hub strip at
         // the bottom; crafts keep their own full chrome untouched between them.
         header(ui, &mut self.about_open, self.active);
@@ -848,7 +875,7 @@ fn about_window(ctx: &Context, open: &mut bool) {
             ui.painter().rect_filled(Rect::from_min_size(hr.left_bottom(), vec2(hr.width(), 2.0)), 0.0, theme::ACCENT);
             paint_logo_mark(ui, hr.min + vec2(20.0, 20.0), 44.0);
             ui.painter().text(hr.min + vec2(78.0, 34.0), Align2::LEFT_CENTER, "About DocCraft", FontId::proportional(24.0), theme::INK_STRONG);
-            ui.painter().text(hr.min + vec2(78.0, 60.0), Align2::LEFT_CENTER, format!("DocCraft Suite v{} · one binary · ten crafts", env!("CARGO_PKG_VERSION")), FontId::monospace(11.5), theme::MUTED);
+            ui.painter().text(hr.min + vec2(78.0, 60.0), Align2::LEFT_CENTER, format!("DocCraft Suite v{} · one binary · nine crafts", env!("CARGO_PKG_VERSION")), FontId::monospace(11.5), theme::MUTED);
 
             egui::ScrollArea::vertical().id_salt("about_scroll").max_height(340.0).show(ui, |ui| {
                 ui.add_space(12.0);
@@ -878,7 +905,7 @@ fn about_window(ctx: &Context, open: &mut bool) {
                         ui.add_space(12.0);
                         ui.label(RichText::new("FILE TYPES THIS SYSTEM OPENS").font(FontId::monospace(10.0)).color(theme::FAINT));
                         ui.add_space(4.0);
-                        ui.label(RichText::new(".docx .doc .odt .rtf · .xlsx .xls .ods .csv · .pptx · .pdf · .drawio · .fig .svg · .md · .typ .tex · .note").font(FontId::monospace(11.0)).color(theme::INK));
+                        ui.label(RichText::new(".docx .doc .odt .rtf · .xlsx .xlsm .xls .ods .csv .tsv · .pptx .potx .ppsx · .pdf · .drawio .xml · .fig .figcraft .figma .svg · .md .markdown · .typ .tex .ts · .note .notes").font(FontId::monospace(11.0)).color(theme::INK));
                         ui.add_space(8.0);
                         if ui.add(egui::Button::new(RichText::new("Register file associations (Windows)").size(12.0))).clicked() {
                             crate::register_associations::run();

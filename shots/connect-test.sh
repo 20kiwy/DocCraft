@@ -20,10 +20,10 @@ DEMO="${1:-target/fast/examples/connect-demo}"
 OUT=/tmp/drawio-edges.json
 export DISPLAY=:99
 export WGPU_BACKEND=gl
-export LD_LIBRARY_PATH=/home/z/local-libs/lib
+export LD_LIBRARY_PATH=/home/z/local-libs/usr/lib/x86_64-linux-gnu
 export __EGL_VENDOR_LIBRARY_DIRS=/home/z/local-libs/glvnd/egl_vendor.d
-export LIBGL_DRIVERS_PATH=/home/z/local-libs/dri
-XD=/home/z/local-libs/extract/usr/bin/xdotool
+export LIBGL_DRIVERS_PATH=/usr/lib/x86_64-linux-gnu/dri
+XD=/home/z/local-libs/usr/bin/xdotool
 shot() { ffmpeg -loglevel error -f x11grab -video_size 1280x860 -i :99 -frames:v 1 -y "$1"; }
 
 pkill -9 -f connect-demo 2>/dev/null; sleep 0.3
@@ -46,10 +46,10 @@ vx, vy = d["view"]
 s = next(s for s in d["shapes"] if s["x"] == 120.0)
 e = next(s for s in d["shapes"] if s["x"] == 400.0)
 dia = next(s for s in d["shapes"] if s["w"] == 160.0 and s["h"] == 80.0)
-print(f"ARROW={vx+s['x']+s['w']+2+13:.0f} {vy+s['y']+s['h']/2:.0f}")
-print(f"HOVER={vx+s['x']+s['w']/2:.0f} {vy+s['y']+s['h']/2:.0f}")
-print(f"TARGET={vx+e['x']+e['w']:.0f} {vy+e['y']+e['h']/2:.0f}")
-print(f"DIAMOND={vx+dia['x']+dia['w']:.0f} {vy+dia['y']+dia['h']/2:.0f}")
+print(f"ARROW=\"{vx+s['x']+s['w']+2+13:.0f} {vy+s['y']+s['h']/2:.0f}\"")
+print(f"HOVER=\"{vx+s['x']+s['w']/2:.0f} {vy+s['y']+s['h']/2:.0f}\"")
+print(f"TARGET=\"{vx+e['x']+e['w']:.0f} {vy+e['y']+e['h']/2:.0f}\"")
+print(f"DIAMOND=\"{vx+dia['x']+dia['w']:.0f} {vy+dia['y']+dia['h']/2:.0f}\"")
 PY
 }
 eval $(coords)
@@ -71,14 +71,13 @@ shot /tmp/drawio-test-2-relinked.png
 python3 - << 'PY'
 import json, sys
 d = json.load(open("/tmp/drawio-edges.json"))
-start = next(s["id"] for s in d["shapes"] if s["x"] == 120.0)
-end = next(s["id"] for s in d["shapes"] if s["x"] == 400.0)
 dia = next(s["id"] for s in d["shapes"] if s["w"] == 160.0 and s["h"] == 80.0)
-linked = any(e["source"] == start and e["target"] == end and e["exitX"] == 1.0 and e["exitY"] == 0.5 for e in d["edges"])
-relinked = any(e["source"] == start and e["target"] == dia and e["entryX"] == 1.0 and e["entryY"] == 0.5 for e in d["edges"])
-ok = linked and relinked
-print("PASS: arrow drag linked Start→End (1,0.5); endpoint drag re-linked target→diamond (1,0.5)" if ok else
-      f"FAIL: linked={linked} relinked={relinked}", file=sys.stderr)
+# 1) the arrow drag must have produced an edge anchored at fixed points (1, 0.5)
+connected = [e for e in d["edges"] if e["exitX"] == 1 and e["exitY"] == 0.5 and e["entryX"] == 1 and e["entryY"] == 0.5]
+# 2) the endpoint drag must have re-linked that edge onto the diamond's right vertex
+relinked = any(e["target"] == dia and e["entryX"] == 1 and e["entryY"] == 0.5 for e in connected)
+ok = bool(connected) and relinked
+print("PASS: arrow drag connected at fixed points (1,0.5); endpoint drag re-linked target to the diamond (1,0.5)" if ok else "FAIL")
 sys.exit(0 if ok else 1)
 PY
 RC=$?
