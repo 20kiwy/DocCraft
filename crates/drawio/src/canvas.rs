@@ -427,8 +427,8 @@ fn canvas_input(
                     return;
                 }
                 // vertex / edge pick
-                let picked = pick_vertex(app.page(), world, false).map(|c| (c.id.clone(), c.geom.x, c.geom.y));
-                if let Some((id, px, py)) = picked {
+                let picked = pick_vertex(app.page(), world, false).map(|c| c.id.clone());
+                if let Some(id) = picked {
                     if !app.selected.contains(&id) {
                         let mods = ui.input(|i| i.modifiers);
                         if mods.shift {
@@ -437,12 +437,15 @@ fn canvas_input(
                             app.selected = vec![id.clone()];
                         }
                     }
-                    let grab = Vec2::new(world.x - px, world.y - py);
                     let ids = app.selected.clone();
                     let orig = positions(app, &ids);
+                    // press-world reference: the drag delta is world − press
+                    // (grab used to store the shape-origin offset, which
+                    // double-counted it and teleported nodes by their own x/y)
+                    let grab = Vec2::new(world.x, world.y);
                     app.push_undo();
                     app.drag = Drag::Move { ids, grab, orig, moved: false };
-                } else if let Some(id) = pick_edge(routes, world, app.zoom) {
+                } else if let Some(id) = pick_edge(routes, p, app.zoom) {
                     if !app.selected.contains(&id) {
                         app.selected = vec![id];
                     }
@@ -579,8 +582,16 @@ fn canvas_input(
                 }
             }
             Tool::Select => {
-                // plain click without drag on empty: clear selection
-                if pick_vertex(app.page(), world, false).is_none() && pick_edge(routes, world, app.zoom).is_none() {
+                // drawio selects on mouse-up. egui 0.36 postpones drag_started
+                // for motionless presses, so a plain click owns edge selection
+                // (vertex selection happens on press; keep it here).
+                if pick_vertex(app.page(), world, false).is_some() {
+                    // keep the press-time selection
+                } else if let Some(id) = pick_edge(routes, p, app.zoom) {
+                    if !app.selected.contains(&id) {
+                        app.selected = vec![id];
+                    }
+                } else {
                     app.selected.clear();
                 }
                 app.ctx_menu = None;
@@ -638,7 +649,7 @@ fn canvas_input(
             let v = c.value.clone();
             app.edit_label = Some((c.id.clone(), v.clone(), v));
             app.edit_just_opened = true;
-        } else if let Some(id) = pick_edge(routes, world, app.zoom) {
+        } else if let Some(id) = pick_edge(routes, p, app.zoom) {
             // near an existing waypoint? remove it. near the midpoint? edit label. else add waypoint.
             let near_wp = app
                 .page()
@@ -688,7 +699,7 @@ fn canvas_input(
     if resp.secondary_clicked() {
         let Some(p) = resp.interact_pointer_pos() else { return };
         let world = s2w(p);
-        let cell = pick_vertex(app.page(), world, true).map(|c| c.id.clone()).or_else(|| pick_edge(routes, world, app.zoom));
+        let cell = pick_vertex(app.page(), world, true).map(|c| c.id.clone()).or_else(|| pick_edge(routes, p, app.zoom));
         if let Some(id) = cell.clone()
             && !app.selected.contains(&id)
         {
@@ -812,10 +823,11 @@ fn pick_vertex(page: &Diagram, world: Pos2, include_locked: bool) -> Option<&Cel
     })
 }
 
-fn pick_edge(routes: &[(String, style::EdgeRoute, Vec<Pos2>)], world: Pos2, zoom: f32) -> Option<String> {
+fn pick_edge(routes: &[(String, style::EdgeRoute, Vec<Pos2>)], screen_p: Pos2, zoom: f32) -> Option<String> {
+    // routes are in SCREEN space: hit-test with the screen pointer, not world
     let tol = 6.0 / zoom.max(0.3);
     routes.iter().rev().find_map(|(id, _, pts)| {
-        pts.windows(2).any(|w| dist_to_seg(world, w[0], w[1]) < tol).then(|| id.clone())
+        pts.windows(2).any(|w| dist_to_seg(screen_p, w[0], w[1]) < tol).then(|| id.clone())
     })
 }
 
@@ -1001,7 +1013,10 @@ fn hover_arrows(
         (&ARROW_DOWN_PTS, ARROW_DOWN_SIZE, Pos2::new(cx - ARROW_DOWN_SIZE.0 / 2.0, b.bottom()), (0.5, 1.0)),
         (&ARROW_LEFT_PTS, ARROW_LEFT_SIZE, Pos2::new(b.left() - ARROW_LEFT_SIZE.0, cy - ARROW_LEFT_SIZE.1 / 2.0), (0.0, 0.5)),
     ];
-    let inside_shape = ptr.map(|p| shape_r.expand(2.0).contains(p)).unwrap_or(false);
+    let inside_shape = ptr.map(|p| shape_r.expand(8.0).contains(p)).unwrap_or(false);
+    // "touch on the edge": arrows stay bright while the pointer is on the
+    // shape or within 8 px of its border (drawio keeps HoverIcons active
+    // across the whole shape bbox + tolerance, not only the interior)
     // drawio draws edge-endpoint handles ABOVE the hover icons — when a
     // selected edge's endpoint sits at a fixed point, its handle must win the
     // press over the shape's arrow (mxConstraintHandler/overlay pane order).
@@ -1041,7 +1056,7 @@ fn hover_arrows(
         if overlapped {
             continue;
         }
-        let hresp = ui.allocate_rect(box_r.expand(3.0), Sense::click_and_drag());
+        let hresp = ui.allocate_rect(box_r.expand(1.0), Sense::click_and_drag());
         // inactiveOpacity 15 until the pointer reaches the shape or the arrow
         let alpha = if hresp.hovered() || hresp.dragged() || inside_shape { 255u8 } else { ARROW_INACTIVE_ALPHA };
         let fill = Color32::from_rgba_unmultiplied(0x29, 0xb6, 0xf2, alpha);
@@ -1417,8 +1432,14 @@ fn paint_edge(p: &egui::Painter, pts: &[Pos2], st: &str, look: &Look, jumps: &[(
     match style::edge_route(st) {
         style::EdgeRoute::Curved => paint_curve(p, pts, look, &dash, st),
         _ => {
-            // path with jump arcs
-            let mut path: Vec<Pos2> = Vec::with_capacity(pts.len() + jumps.len() * 6);
+            // path with jump arcs. Seed with the FIRST point: each window only
+            // pushes its end, so without the seed a 2-point edge collapses to a
+            // single point and paints nothing (and longer routes lose their
+            // first segment).
+            let mut path: Vec<Pos2> = Vec::with_capacity(pts.len() + jumps.len() * 6 + 1);
+            if let Some(first) = pts.first() {
+                path.push(*first);
+            }
             let jr = (4.0 * zoom.max(0.5)).min(9.0);
             for (si, w) in pts.windows(2).enumerate() {
                 let seg_jumps: Vec<f32> = jumps.iter().filter(|(s, _)| *s == si).map(|(_, t)| *t).collect();

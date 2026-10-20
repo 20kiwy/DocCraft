@@ -37,7 +37,7 @@ impl eframe::App for Demo {
             dump += &format!("\"view\":[{:.1},{:.1}],", r.min.x, r.min.y);
         }
         dump += &format!(
-            "\"pan\":[{:.1},{:.1}],\"zoom\":{:.2},\"connect\":\"{}\",\"hover\":{},",
+            "\"pan\":[{:.1},{:.1}],\"zoom\":{:.2},\"connect\":\"{}\",\"hover\":{},\"selected\":{},",
             self.0.pan.x, self.0.pan.y, self.0.zoom,
             match &self.0.connect {
                 doccraft_drawio::connection::ConnectState::Idle => "Idle".into(),
@@ -45,6 +45,7 @@ impl eframe::App for Demo {
                 doccraft_drawio::connection::ConnectState::EndpointDrag { edge, .. } => format!("EndpointDrag({edge})"),
             },
             self.0.hover.as_ref().map(|(id, _)| format!("\"{id}\"")).unwrap_or("null".into()),
+            format!("[{}]", self.0.selected.iter().map(|i| format!("\"{i}\"")).collect::<Vec<_>>().join(",")),
         );
         dump += "\"shapes\":[";
         let mut first = true;
@@ -58,11 +59,17 @@ impl eframe::App for Demo {
         }
         dump += "],\"edges\":[";
         first = true;
+        let (pan, zoom) = (self.0.pan, self.0.zoom);
         for c in page.cells.iter().filter(|c| c.edge) {
             if !first { dump += ","; }
             first = false;
+            // world-space route points (screen = view + pan + p*zoom)
+            let pts = doccraft_drawio::connection::route_points(&page, c);
+            let pts_s: Vec<String> = pts.iter()
+                .map(|p| format!("[{:?},{:?}]", p.x, p.y))
+                .collect();
             dump += &format!(
-                "{{\"id\":\"{}\",\"source\":{},\"target\":{},\"exitX\":{},\"exitY\":{},\"entryX\":{},\"entryY\":{}}}",
+                "{{\"id\":\"{}\",\"source\":{},\"target\":{},\"exitX\":{},\"exitY\":{},\"entryX\":{},\"entryY\":{},\"route\":[{}],\"style\":\"{}\"}}",
                 c.id,
                 opt(&c.source),
                 opt(&c.target),
@@ -70,6 +77,8 @@ impl eframe::App for Demo {
                 js(&style_num(&c.style, "exitY")),
                 js(&style_num(&c.style, "entryX")),
                 js(&style_num(&c.style, "entryY")),
+                pts_s.join(","),
+                c.style.replace('"', "'"),
             );
         }
         dump += "]}";
@@ -77,6 +86,28 @@ impl eframe::App for Demo {
         let tmp = std::path::Path::new("/tmp/drawio-edges.json.tmp");
         if std::fs::write(tmp, dump.as_bytes()).is_ok() {
             let _ = std::fs::rename(tmp, "/tmp/drawio-edges.json");
+        }
+
+        // DEBUG overlay: magenta route lines to discriminate engine-vs-paint.
+        if std::env::var("DEMO_DEBUG").is_ok()
+            && let Some(r) = self.0.view_rect
+        {
+            let (pan, zoom) = (self.0.pan, self.0.zoom);
+            let w2s = |p: egui::Pos2| r.min + pan + p.to_vec2() * zoom;
+            let painter = ui.painter_at(r);
+            for c in page.cells.iter().filter(|c| c.edge) {
+                let pts: Vec<egui::Pos2> =
+                    doccraft_drawio::connection::route_points(&page, c).into_iter().map(w2s).collect();
+                if pts.len() >= 2 {
+                    painter.add(egui::Shape::line(
+                        pts.clone(),
+                        egui::Stroke::new(2.0, egui::Color32::from_rgb(0xff, 0x00, 0xff)),
+                    ));
+                }
+                for p in &pts {
+                    painter.circle_filled(*p, 3.0, egui::Color32::from_rgb(0x00, 0xff, 0x00));
+                }
+            }
         }
     }
 }
@@ -107,16 +138,23 @@ fn main() -> eframe::Result {
             .with_decorations(false),
         ..Default::default()
     };
+    // DEMO_PAGE=sample → the plain sample flowchart (user-scenario repro);
+    // default → the two-shape connect-parity harness page.
+    let sample = std::env::var("DEMO_PAGE").as_deref() == Ok("sample");
     eframe::run_native(
         "drawio connect demo",
         opts,
-        Box::new(|_cc| {
+        Box::new(move |_cc| {
             let mut app = DrawApp::new();
-            app.edit_page(|page| {
-                // two rectangles that both fit the default canvas viewport
-                page.add_vertex("Start", DEFAULT_VERTEX_STYLE, 120.0, 120.0, 200.0, 70.0);
-                page.add_vertex("End", DEFAULT_VERTEX_STYLE, 400.0, 320.0, 200.0, 70.0);
-            });
+            if sample {
+                app.edit_page(|page| *page = DrawApp::new().file.diagrams[0].clone());
+            } else {
+                app.edit_page(|page| {
+                    // two rectangles that both fit the default canvas viewport
+                    page.add_vertex("Start", DEFAULT_VERTEX_STYLE, 120.0, 120.0, 200.0, 70.0);
+                    page.add_vertex("End", DEFAULT_VERTEX_STYLE, 400.0, 320.0, 200.0, 70.0);
+                });
+            }
             Ok(Box::new(Demo(app)))
         }),
     )

@@ -472,19 +472,87 @@ fn orthogonal_chain(page: &Diagram, a: Endpt, wps: &[Pos2], b: Endpt, cell: &Cel
         pts.push(a.pos + exit_dir * ja);
     }
     let mut cur = *pts.last().unwrap();
-    for w in wps {
-        pts.extend(elbow_pts(cur, *w));
+    // terminal approach axes (mxGraph OrthConnector): the segment adjacent to
+    // a terminal travels perpendicular to the host-shape side it sits on
+    let src_axis = cell
+        .source
+        .as_deref()
+        .and_then(|id| page.cell(id))
+        .map(|h| terminal_axis(h.rect(), a.pos));
+    let dst_axis = cell
+        .target
+        .as_deref()
+        .and_then(|id| page.cell(id))
+        .map(|h| terminal_axis(h.rect(), b.pos));
+    // first bend keeps the exit axis (collinear with the jetty), so the edge
+    // never doubles back into its own shape
+    let horiz_first = if exit_dir != Vec2::ZERO {
+        Some(exit_dir.x != 0.0)
+    } else {
+        src_axis.map(|ax| ax == Axis::Horizontal)
+    };
+    for (i, w) in wps.iter().enumerate() {
+        if i == 0 {
+            if let Some(horiz) = horiz_first {
+                let bend = if horiz { Pos2::new(w.x, cur.y) } else { Pos2::new(cur.x, w.y) };
+                if bend.distance(cur) > 0.5 && bend.distance(*w) > 0.5 {
+                    pts.push(bend);
+                }
+            } else {
+                pts.extend(elbow_pts(cur, *w));
+            }
+        } else {
+            pts.extend(elbow_pts(cur, *w));
+        }
         pts.push(*w);
         cur = *w;
     }
+    // target jetty: OUTWARD from the border along the entry direction (the
+    // incoming line stops `jb` short of the shape, then enters perpendicularly)
     let enter_dir = exit_direction(page, cell, false, b, wps.last().copied());
-    let target = if enter_dir != Vec2::ZERO && jb > 0.0 { b.pos - enter_dir * jb } else { b.pos };
-    pts.extend(elbow_pts(cur, target));
-    if enter_dir != Vec2::ZERO && jb > 0.0 {
+    let stub = enter_dir != Vec2::ZERO && jb > 0.0;
+    let target = if stub { b.pos + enter_dir * jb } else { b.pos };
+    if stub {
+        // bend perpendicular to the terminal side so the final run is aligned
+        // with the jetty (vertical into top/bottom, horizontal into left/right)
+        let bend = match dst_axis {
+            Some(Axis::Vertical) => Pos2::new(target.x, cur.y),
+            _ => Pos2::new(cur.x, target.y),
+        };
+        if bend.distance(cur) > 0.5 {
+            pts.push(bend);
+        }
         pts.push(target);
+    } else if let Some(ax) = dst_axis {
+        // no jetty: still approach along the terminal axis
+        let bend = match ax {
+            Axis::Vertical => Pos2::new(b.pos.x, cur.y),
+            Axis::Horizontal => Pos2::new(cur.x, b.pos.y),
+        };
+        if bend.distance(cur) > 0.5 && bend.distance(b.pos) > 0.5 {
+            pts.push(bend);
+        }
     }
     pts.push(b.pos);
     dedupe(pts)
+}
+
+/// Axis of the terminal approach: the side of `r` that `p` lies on, taken as
+/// the dominant direction from the rect center (works for fixed points on the
+/// border and floating perimeter points of any shape class).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Axis {
+    Horizontal,
+    Vertical,
+}
+
+fn terminal_axis(r: Rect, p: Pos2) -> Axis {
+    let d = p - r.center();
+    if d.x.abs() >= d.y.abs() {
+        Axis::Horizontal
+    } else {
+        Axis::Vertical
+    }
 }
 
 /// Direction the edge leaves (or enters) an endpoint: fixed constraint → the
