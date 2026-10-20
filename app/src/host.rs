@@ -901,7 +901,7 @@ fn about_window(ctx: &Context, open: &mut bool) {
                         ui.add_space(12.0);
                         ui.label(RichText::new("UPDATING ANY CRAFT").font(FontId::monospace(10.0)).color(theme::FAINT));
                         ui.add_space(4.0);
-                        ui.label(RichText::new("Each real craft is a git submodule:  git submodule update --remote upstream/<craft>  then  cargo build --profile fast.  scripts/update-crafts.sh updates all of them at once.").size(12.5).color(theme::INK));
+                        ui.label(RichText::new("Each real craft is a git submodule:  git submodule update --remote clone/<craft>  then  cargo build --profile fast.  scripts/update-crafts.sh updates all of them at once.").size(12.5).color(theme::INK));
                         ui.add_space(12.0);
                         ui.label(RichText::new("FILE TYPES THIS SYSTEM OPENS").font(FontId::monospace(10.0)).color(theme::FAINT));
                         ui.add_space(4.0);

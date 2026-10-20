@@ -8,9 +8,10 @@ members = [
     "crates/typeset",
     "crates/notes",
 ]
-# The six real upstream craft systems live here as git submodules and keep
-# their own workspaces; they are consumed as path dependencies from `app`.
-exclude = ["upstream"]
+# The six real upstream craft systems live here as git submodules under
+# `clone/` and keep their own workspaces; they are consumed as path
+# dependencies from `app`.
+exclude = ["clone"]
 
 [workspace.package]
 version = "3.4.0"
@@ -33,17 +34,17 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 roxmltree = "0.19"
 
-# ── The real storytold crafts (git submodules under upstream/) ──────────────
-craft-ui          = { path = "upstream/craft-libs/crates/ui" }
-wordcraft-ui-egui = { path = "upstream/wordcraft/crates/ui-egui" }
-wordcraft-engine  = { path = "upstream/wordcraft/crates/engine" }
-gridcraft-ui-egui = { path = "upstream/gridcraft/crates/ui-egui" }
-gridcraft-engine  = { path = "upstream/gridcraft/crates/engine" }
-deckcraft-ui-egui = { path = "upstream/deckcraft/crates/ui-egui" }
-deckcraft-engine  = { path = "upstream/deckcraft/crates/engine" }
-pdfcraft-ui-egui  = { path = "upstream/pdfcraft/crates/ui-egui" }
-figcraft-ui-egui  = { path = "upstream/figcraft/crates/ui-egui" }
-figcraft-engine   = { path = "upstream/figcraft/crates/engine" }
+# ── The real storytold crafts (git submodules under clone/) ─────────────────
+craft-ui          = { path = "clone/craft-libs/crates/ui" }
+wordcraft-ui-egui = { path = "clone/wordcraft/crates/ui-egui" }
+wordcraft-engine  = { path = "clone/wordcraft/crates/engine" }
+gridcraft-ui-egui = { path = "clone/gridcraft/crates/ui-egui" }
+gridcraft-engine  = { path = "clone/gridcraft/crates/engine" }
+deckcraft-ui-egui = { path = "clone/deckcraft/crates/ui-egui" }
+deckcraft-engine  = { path = "clone/deckcraft/crates/engine" }
+pdfcraft-ui-egui  = { path = "clone/pdfcraft/crates/ui-egui" }
+figcraft-ui-egui  = { path = "clone/figcraft/crates/ui-egui" }
+figcraft-engine   = { path = "clone/figcraft/crates/engine" }
 
 # ── The new native DocCraft crafts ──────────────────────────────────────────
 doccraft-theme    = { path = "crates/theme" }
@@ -56,27 +57,27 @@ doccraft-notes    = { path = "crates/notes" }
 # upstream repo pinned, so the whole suite links a single `craft-ui` (and the
 # other craft-libs crates) instead of several conflicting git revisions.
 [patch."https://github.com/storytold/craft-libs"]
-craft-ui      = { path = "upstream/craft-libs/crates/ui" }
-craft-pdf     = { path = "upstream/craft-libs/crates/pdf" }
-craft-print   = { path = "upstream/craft-libs/crates/print" }
-craft-settings = { path = "upstream/craft-libs/crates/settings" }
-craft-quit    = { path = "upstream/craft-libs/crates/quit" }
-craft-atomic  = { path = "upstream/craft-libs/crates/atomic" }
-craft-docpath = { path = "upstream/craft-libs/crates/docpath" }
-craft-cms     = { path = "upstream/craft-libs/crates/cms" }
-craft-ai-core = { path = "upstream/craft-libs/crates/ai-core" }
+craft-ui      = { path = "clone/craft-libs/crates/ui" }
+craft-pdf     = { path = "clone/craft-libs/crates/pdf" }
+craft-print   = { path = "clone/craft-libs/crates/print" }
+craft-settings = { path = "clone/craft-libs/crates/settings" }
+craft-quit    = { path = "clone/craft-libs/crates/quit" }
+craft-atomic  = { path = "clone/craft-libs/crates/atomic" }
+craft-docpath = { path = "clone/craft-libs/crates/docpath" }
+craft-cms     = { path = "clone/craft-libs/crates/cms" }
+craft-ai-core = { path = "clone/craft-libs/crates/ai-core" }
 
 # The upstreams carry vendor forks of crates.io libraries with fixes they
 # depend on (craft-pdf literally requires the patched krilla symbol). Route
 # every consumer in the suite to the same forks.
 [patch.crates-io]
-krilla         = { path = "upstream/craft-libs/vendor/krilla" }
-hayro          = { path = "upstream/pdfcraft/vendor/hayro" }
-hayro-interpret = { path = "upstream/pdfcraft/vendor/hayro-interpret" }
-hayro-syntax   = { path = "upstream/pdfcraft/vendor/hayro-syntax" }
-hayro-jbig2    = { path = "upstream/pdfcraft/vendor/hayro-jbig2" }
-lopdf          = { path = "upstream/pdfcraft/vendor/lopdf" }
-vello_common   = { path = "upstream/pdfcraft/vendor/vello_common" }
+krilla         = { path = "clone/craft-libs/vendor/krilla" }
+hayro          = { path = "clone/pdfcraft/vendor/hayro" }
+hayro-interpret = { path = "clone/pdfcraft/vendor/hayro-interpret" }
+hayro-syntax   = { path = "clone/pdfcraft/vendor/hayro-syntax" }
+hayro-jbig2    = { path = "clone/pdfcraft/vendor/hayro-jbig2" }
+lopdf          = { path = "clone/pdfcraft/vendor/lopdf" }
+vello_common   = { path = "clone/pdfcraft/vendor/vello_common" }
 
 # Fast 2-core-friendly profile: same feature set as release, much cheaper to
 # compile (opt 1, no LTO, many codegen units, incremental).

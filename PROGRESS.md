@@ -4,7 +4,7 @@
   now NINE crafts (5 real + Draw/Markdown/Typeset/Notes). `.vec` routing and
   the file association were dropped; `.svg` now routes to Design (FigCraft).
 - **Draw craft matched to the real drawio JS** (jgraph/drawio v32.5.5, now a
-  git submodule at `upstream/drawio` so the spec source ships with the repo):
+  git submodule at `clone/drawio` so the spec source ships with the repo):
   - hover arrows = exact HoverIcons SVG paths/sizes/placement (Graph.js
     `HoverIcons.prototype.repaint`), 140 ms activation, 15% inactive opacity
   - preview edge = mxConnectionHandler `createShape` semantics: DASHED, green
@@ -35,7 +35,7 @@ function, remake the ui-panel for markdown and typeset with settings well."**
 
 | Area | 3.0 | 3.1 (this release) |
 |---|---|---|
-| Design view | — | **FigCraft embedded as the 5th real craft** (`upstream/figcraft` v0.7.0-104, 16 crates, ~236k lines): frames, vectors, text, components, styles, prototyping, Dev Mode; `.fig`/`.figcraft`/`.svg` routing |
+| Design view | — | **FigCraft embedded as the 5th real craft** (`clone/figcraft` v0.7.0-104, 16 crates, ~236k lines): frames, vectors, text, components, styles, prototyping, Dev Mode; `.fig`/`.figcraft`/`.svg` routing |
 | Draw (drawio) | palette of 8 mini-categories, basic editor | **full editor**: 14-category shape library (~180 shapes: General/Basic/Arrows/UML/ER/Flowchart/BPMN/Mockups/Tables/Titles/Misc), palette search, Style/Text/Arrange format tabs, layers panel, minimap outline, Edit-XML dialog, Find & Replace, group/ungroup, duplicate, alignment guides + snap, waypoints, edge routes (ortho/straight/curved) with line jumps, ER arrow ends, context menu, page setup, zoom controls, keyboard shortcuts |
 | Markdown | toolbar + split preview | **wordcraft-anatomy chrome**: title strip + QAT, Home/Insert/View ribbon tabs with grouped commands, right pane (outline, document stats, export), settings dialog (editor/preview/accent/session), pipe tables, bottom preview mode, status bar (Ln/Col, words) |
 | Typeset | source + A4 preview | **wordcraft-anatomy chrome**: ribbon tabs (Home/Insert/Page/View), settings-driven layout engine (paper presets, margins, 2 columns, page numbers, footer text, line spacing), right pane (outline with page jumps, recompile status, export), find bar, gutter, settings dialog |
@@ -61,11 +61,11 @@ crafts (Draw, Markdown, Typeset) written in the same pattern.
 | Area | 2.5 (previous) | 3.0 (this release) |
 |---|---|---|
 | UI source | our re-creation of the craft look | **the real upstream UI code** — each craft's own `crates/ui-egui` (WordCraft's is 54k lines) linked as path deps |
-| Word view | our Writer mimic | **WordApp** from `upstream/wordcraft` (v0.8.0) — real ribbon, backstage, dialogs |
-| Grid view | our Sheets mimic | **SheetApp** from `upstream/gridcraft` (v0.8.0) — real formula engine (513 functions) |
-| Deck view | our Slides mimic | **SlideApp** from `upstream/deckcraft` (v0.8.0) — real PowerPoint engine |
-| Reader view | our Reader mimic | **PdfCraftApp** from `upstream/pdfcraft` (v0.9.0) — real Acrobat-style shell |
-| Shared widgets | n/a | **craft-ui** from `upstream/craft-libs` — the shared storytold UI foundation, one local checkout via `[patch]` |
+| Word view | our Writer mimic | **WordApp** from `clone/wordcraft` (v0.8.0) — real ribbon, backstage, dialogs |
+| Grid view | our Sheets mimic | **SheetApp** from `clone/gridcraft` (v0.8.0) — real formula engine (513 functions) |
+| Deck view | our Slides mimic | **SlideApp** from `clone/deckcraft` (v0.8.0) — real PowerPoint engine |
+| Reader view | our Reader mimic | **PdfCraftApp** from `clone/pdfcraft` (v0.9.0) — real Acrobat-style shell |
+| Shared widgets | n/a | **craft-ui** from `clone/craft-libs` — the shared storytold UI foundation, one local checkout via `[patch]` |
 | Draw | in-crate drawio parser + editor | **`crates/drawio`** native craft: mxGraph model, XML round-trip, diagrams.net-style editor |
 | Markdown | in-crate notes view | **`crates/md`** native craft: CommonMark subset, split live preview |
 | Typeset | in-crate typeset view | **`crates/typeset`** native craft: layout engine, paginated A4 preview, PDF export |
@@ -77,18 +77,18 @@ crafts (Draw, Markdown, Typeset) written in the same pattern.
 
 ```
 app (doccraft binary)
- ├─ wordcraft-ui-egui  → upstream/wordcraft/crates/ui-egui  (+ engine, doc, docx, layout, render, fonts, proof, zotero, geom …)
- ├─ gridcraft-ui-egui  → upstream/gridcraft/crates/ui-egui  (+ engine, functions, formula, calc, numfmt, xlsx, chart …)
- ├─ deckcraft-ui-egui  → upstream/deckcraft/crates/ui-egui  (+ engine, pptx, model, render, text, media stack …)
- ├─ pdfcraft-ui-egui   → upstream/pdfcraft/crates/ui-egui   (+ engine, model, cos, filters, forms, ocr, sign …)
- ├─ craft-ui           → upstream/craft-libs/crates/ui       (single copy via [patch."…craft-libs"])
+ ├─ wordcraft-ui-egui  → clone/wordcraft/crates/ui-egui  (+ engine, doc, docx, layout, render, fonts, proof, zotero, geom …)
+ ├─ gridcraft-ui-egui  → clone/gridcraft/crates/ui-egui  (+ engine, functions, formula, calc, numfmt, xlsx, chart …)
+ ├─ deckcraft-ui-egui  → clone/deckcraft/crates/ui-egui  (+ engine, pptx, model, render, text, media stack …)
+ ├─ pdfcraft-ui-egui   → clone/pdfcraft/crates/ui-egui   (+ engine, model, cos, filters, forms, ocr, sign …)
+ ├─ craft-ui           → clone/craft-libs/crates/ui       (single copy via [patch."…craft-libs"])
  ├─ doccraft-drawio / doccraft-md / doccraft-typeset       (this repo's native crafts)
 ```
 
 - Package names in upstream are already namespaced (`wordcraft-*`,
   `gridcraft-*`, `deckcraft-*`, `pdfcraft-*`), so all four graphs coexist in
   one dependency graph with zero renames.
-- `upstream/*` is `exclude`d from our workspace; cargo still resolves each
+- `clone/*` is `exclude`d from our workspace; cargo still resolves each
   crate's `workspace = true` inheritance from its own upstream root.
 - Embedding surface per craft (all pub): `WordApp::new(session, services)` +
   `logic(ctx)` + `ui(ui)`; `SheetApp::new(session, services)` +
@@ -201,7 +201,7 @@ a native Windows build with NASM is the upstream-faithful alternative.
 ## 3.4.0 — one design language, full GraphEditor
 
 - `crates/theme` (doccraft-theme): FigCraft UI3 light/dark Tokens ported 1:1
-  from `upstream/figcraft/crates/ui-egui/src/theme.rs` — accent #0D99FF,
+  from `clone/figcraft/crates/ui-egui/src/theme.rs` — accent #0D99FF,
   radius-5 widgets, radius-13 windows, soft page shadows, 11px UI text. Every
   native craft now paints exclusively from these tokens (dark default,
   ☀/☾ toggle, Light/Dark radio in settings).

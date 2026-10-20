@@ -13,7 +13,7 @@
 1. **The real code, not a look-alike.** The UI of each craft is the upstream
    `crates/ui-egui` itself, linked unmodified. No re-implementations.
 2. **Updatable per repo.** Every upstream craft is a git submodule under
-   `upstream/`; one script re-pins all of them to latest and the suite
+   `clone/`; one script re-pins all of them to latest and the suite
    rebuilds against the new source.
 3. **Honest accounting.** Versions and readiness percentages are quoted from
    each upstream ROADMAP verbatim (CRAFT-STATUS.md), never invented.

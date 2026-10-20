@@ -9,18 +9,18 @@ repos=(craft-libs wordcraft pdfcraft gridcraft deckcraft)
 if [ $# -gt 0 ]; then repos=("$@"); fi
 
 for r in "${repos[@]}"; do
-  echo "── updating upstream/$r"
-  git -C "upstream/$r" fetch --tags --prune origin
-  default=$(git -C "upstream/$r" rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's|origin/||' || echo main)
-  git -C "upstream/$r" checkout -q "$default" && git -C "upstream/$r" pull -q --ff-only || true
-  git add "upstream/$r"
+  echo "── updating clone/$r"
+  git -C "clone/$r" fetch --tags --prune origin
+  default=$(git -C "clone/$r" rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's|origin/||' || echo main)
+  git -C "clone/$r" checkout -q "$default" && git -C "clone/$r" pull -q --ff-only || true
+  git add "clone/$r"
 done
 
 echo
 echo "New upstream versions:"
 for r in "${repos[@]}"; do
-  v=$(grep -m1 '^version' "upstream/$r/Cargo.toml" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo '?')
-  h=$(git -C "upstream/$r" rev-parse --short HEAD)
+  v=$(grep -m1 '^version' "clone/$r/Cargo.toml" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo '?')
+  h=$(git -C "clone/$r" rev-parse --short HEAD)
   printf '  %-12s v%s @ %s\n' "$r" "$v" "$h"
 done
 echo "Done. Now rebuild:  cargo build --profile fast"

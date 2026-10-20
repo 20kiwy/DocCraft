@@ -7,7 +7,7 @@
 **One binary hosting the FIVE real storytold crafts — WordCraft, GridCraft,
 DeckCraft, PdfCraft and FigCraft — plus four new native crafts: Draw (drawio),
 Markdown, Typeset and Notes.** The upstream apps are linked **unchanged**
-from git submodules under [`upstream/`](upstream) and render their own complete,
+from git submodules under [`clone/`](clone) and render their own complete,
 real UIs (their chrome, ribbons, toolbars, panels and status bars —
 pixel-for-pixel theirs). The shell (launcher, hub strip, About, window header)
 is themed after storytold's own **craft-launcher**.
@@ -120,9 +120,9 @@ scripts/update-crafts.sh wordcraft    # just one
 cargo build --profile fast            # rebuild the suite against the new pins
 ```
 
-Each `upstream/<repo>` is a normal git submodule: `git submodule status`
-prints the pinned SHA, `git -C upstream/wordcraft checkout vX.Y.Z` pins a
-release, and `git add upstream/wordcraft` records it. `scripts/apply-overrides.sh`
+Each `clone/<repo>` is a normal git submodule: `git submodule status`
+prints the pinned SHA, `git -C clone/wordcraft checkout vX.Y.Z` pins a
+release, and `git add clone/wordcraft` records it. `scripts/apply-overrides.sh`
 re-applies the DocCraft system edits (single About, Website link) after any
 update — idempotent.
 
@@ -157,7 +157,7 @@ DocCraft/
 │   ├── md/                 native Markdown craft (parser + live split preview)
 │   ├── typeset/            native typesetting craft (layout engine + PDF export)
 │   └── notes/              native notebook craft
-├── upstream/               git submodules — the real repos, updatable
+├── clone/                  git submodules — the real repos, updatable
 │   ├── craft-libs/         shared craft-ui widgets   (v0.1.0, 82a24b0)
 │   ├── wordcraft/          Word                      (v0.8.0, 4a251d4)
 │   ├── gridcraft/          Excel                     (v0.8.0-4, c30fa3f)

@@ -1,7 +1,7 @@
 //! DocCraft shared design tokens.
 //!
 //! Ported 1:1 from the upstream FigCraft `ui-egui` design system
-//! (`upstream/figcraft/crates/ui-egui/src/theme.rs`, UI3 light + dark), so the
+//! (`clone/figcraft/crates/ui-egui/src/theme.rs`, UI3 light + dark), so the
 //! native crafts (Draw / Markdown / Typeset / Notes) share the exact same
 //! design language as the real storytold crafts. Every native craft:
 //!

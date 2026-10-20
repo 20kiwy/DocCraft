@@ -9,7 +9,7 @@
 # upstream revisions (update-crafts.sh calls this script at the end).
 #
 # NOTE: applying this makes the submodules show a dirty worktree (that is the
-# intended, documented trade-off). `git -C upstream/<craft> checkout -- .`
+# intended, documented trade-off). `git -C clone/<craft> checkout -- .`
 # reverts to pristine upstream at any time.
 # ─────────────────────────────────────────────────────────────────────────────
 set -u
@@ -21,28 +21,28 @@ apply() { # file  sed-expr
   sed -i "$expr" "$f" && echo "patched: $1"
 }
 
-apply upstream/wordcraft/crates/ui-egui/src/dialogs.rs \
+apply clone/wordcraft/crates/ui-egui/src/dialogs.rs \
   's|Dialog::About { .. } => "About WordCraft"|Dialog::About { .. } => "About DocCraft (WordCraft inside)"|'
 
-apply upstream/gridcraft/crates/ui-egui/src/dialogs.rs \
+apply clone/gridcraft/crates/ui-egui/src/dialogs.rs \
   's|Dialog::custom("about", "About GridCraft", json!({}))|Dialog::custom("about", "About DocCraft (GridCraft inside)", json!({}))|'
 
-apply upstream/deckcraft/crates/ui-egui/src/menus.rs \
+apply clone/deckcraft/crates/ui-egui/src/menus.rs \
   's|"About DeckCraft", "app.about"|"About DocCraft (DeckCraft inside)", "app.about"|'
 
-apply upstream/pdfcraft/crates/engine/src/commands.rs \
+apply clone/pdfcraft/crates/engine/src/commands.rs \
   's|"About PdfCraft", HELP|"About DocCraft (PdfCraft inside)", HELP|'
 
-apply upstream/figcraft/crates/ui-egui/src/toolbar.rs \
+apply clone/figcraft/crates/ui-egui/src/toolbar.rs \
   's|(tr("About FigCraft"), "help.about")|(tr("About DocCraft (FigCraft inside)"), "help.about")|'
 
-apply upstream/figcraft/crates/ui-egui/src/dialogs.rs \
+apply clone/figcraft/crates/ui-egui/src/dialogs.rs \
   's|window(tr("About FigCraft"), ctx)|window(tr("About DocCraft (FigCraft inside)"), ctx)|'
 
-apply upstream/figcraft/crates/engine/src/catalog.rs \
+apply clone/figcraft/crates/engine/src/catalog.rs \
   's|m!("Help", "About FigCraft", "help.about")|m!("Help", "About DocCraft (FigCraft inside)", "help.about")|'
 
-apply upstream/figcraft/crates/engine/src/cmd/view.rs \
+apply clone/figcraft/crates/engine/src/cmd/view.rs \
   's|"About FigCraft", "{}"|"About DocCraft (FigCraft inside)", "{}"|'
 
 echo "DocCraft overrides applied."
@@ -60,7 +60,7 @@ s=s.replace('c("Community Discord", "ui.discord")','c("Website", "ui.discord")')
 open(p,'w').write(s)
 PY
   echo "patched: $1"; }
-wd upstream/wordcraft/crates/ui-egui/src/lib.rs
-wd upstream/wordcraft/crates/ui-egui/src/chrome.rs
-wd upstream/wordcraft/crates/ui-egui/src/ribbon.rs
-wd upstream/wordcraft/crates/ui-egui/src/keytips.rs
+wd clone/wordcraft/crates/ui-egui/src/lib.rs
+wd clone/wordcraft/crates/ui-egui/src/chrome.rs
+wd clone/wordcraft/crates/ui-egui/src/ribbon.rs
+wd clone/wordcraft/crates/ui-egui/src/keytips.rs

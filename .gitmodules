@@ -1,22 +1,22 @@
-[submodule "upstream/craft-libs"]
-	path = upstream/craft-libs
+[submodule "clone/craft-libs"]
+	path = clone/craft-libs
 	url = https://github.com/storytold/craft-libs
-[submodule "upstream/wordcraft"]
-	path = upstream/wordcraft
+[submodule "clone/wordcraft"]
+	path = clone/wordcraft
 	url = https://github.com/storytold/wordcraft
-[submodule "upstream/pdfcraft"]
-	path = upstream/pdfcraft
+[submodule "clone/pdfcraft"]
+	path = clone/pdfcraft
 	url = https://github.com/storytold/pdfcraft
-[submodule "upstream/gridcraft"]
-	path = upstream/gridcraft
+[submodule "clone/gridcraft"]
+	path = clone/gridcraft
 	url = https://github.com/storytold/gridcraft
-[submodule "upstream/deckcraft"]
-	path = upstream/deckcraft
+[submodule "clone/deckcraft"]
+	path = clone/deckcraft
 	url = https://github.com/storytold/deckcraft
-[submodule "upstream/figcraft"]
-	path = upstream/figcraft
+[submodule "clone/figcraft"]
+	path = clone/figcraft
 	url = https://github.com/storytold/figcraft
-[submodule "upstream/drawio"]
-	path = upstream/drawio
+[submodule "clone/drawio"]
+	path = clone/drawio
 	url = https://github.com/jgraph/drawio
 	update = none

@@ -52,7 +52,7 @@ jobs:
             exe: doccraft
 
     steps:
-      - name: Checkout (with all upstream craft submodules)
+      - name: Checkout (with all craft submodules under clone/)
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -67,7 +67,7 @@ jobs:
         with:
           key: ${{ matrix.name }}
 
-      - name: Apply DocCraft system overrides to upstream crafts
+      - name: Apply DocCraft system overrides to the cloned crafts
         shell: bash
         run: bash scripts/apply-overrides.sh
 
