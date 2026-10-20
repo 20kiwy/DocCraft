@@ -583,10 +583,18 @@ fn canvas_input(
             }
             Tool::Select => {
                 // drawio selects on mouse-up. egui 0.36 postpones drag_started
-                // for motionless presses, so a plain click owns edge selection
-                // (vertex selection happens on press; keep it here).
-                if pick_vertex(app.page(), world, false).is_some() {
-                    // keep the press-time selection
+                // for motionless presses, so a plain click on a shape never
+                // reached the press-time selection — the click path must do
+                // the vertex selection itself.
+                if let Some(id) = pick_vertex(app.page(), world, false).map(|c| c.id.clone()) {
+                    if !app.selected.contains(&id) {
+                        let mods = ui.input(|i| i.modifiers);
+                        if mods.shift {
+                            app.selected.push(id.clone());
+                        } else {
+                            app.selected = vec![id.clone()];
+                        }
+                    }
                 } else if let Some(id) = pick_edge(routes, p, app.zoom) {
                     if !app.selected.contains(&id) {
                         app.selected = vec![id];

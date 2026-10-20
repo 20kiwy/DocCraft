@@ -217,3 +217,25 @@ a native Windows build with NASM is the upstream-faithful alternative.
   (Ctrl+S) + text import.
 - `.figma` files open via Design (FigCraft); Windows associations refreshed
   (27 types, stale .vec removed); About window file-type list updated.
+
+## 3.5.0 — More Shapes + FigCraft colour picker
+- Draw palette: previews render without labels (drawio parity — names live in
+  tooltips), fixing the badly overflowing preview text in every section.
+- More Shapes: diagrams.net-style dialog (searchable library checklist with
+  Business/Other groups, live preview grid, Labels + Remember this setting,
+  Cancel/Apply); "+ More Shapes" pinned to the palette bottom; 14 new
+  libraries added (OpenStack, Rack, SAP, Veeam, VMware, ArchiMate 3.2/2.1,
+  BPMN 2.0, SysML, Value Stream Mapping, Cabinets, Infographic, EIP,
+  Electrical); remembered palette persists across restarts.
+- FigCraft-style colour picker popover (crates/drawio/src/colorpicker.rs) on
+  the shared figcraft-color math: saturation/brightness square, hue + alpha
+  sliders with ring knobs, Hex/RGB fields with alpha %, drawio preset
+  swatches + None, "On this page" and Recent colours; wired to Fill / Line /
+  Font / page Background chips in the format panel; alpha writes the drawio
+  opacity keys; one undo entry per gesture.
+- Fixed while verifying: motionless click on a canvas shape never selected it
+  (egui 0.36 postpones drag_started — the click path now selects, drawio's
+  mouse-up semantics); drag-release records the final colour in Recent even
+  without a last-frame write; connect-test.sh clears eframe's persisted demo
+  window (a stale 1100x760 entry parked the edge endpoint under the format
+  panel) and the demo runs at the harness's 1280x860.
