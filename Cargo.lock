@@ -1790,7 +1790,7 @@ dependencies = [
 
 [[package]]
 name = "doccraft"
-version = "3.4.0"
+version = "3.4.1"
 dependencies = [
  "craft-ui",
  "deckcraft-engine",
@@ -1814,7 +1814,7 @@ dependencies = [
 
 [[package]]
 name = "doccraft-drawio"
-version = "3.4.0"
+version = "3.4.1"
 dependencies = [
  "craft-ui",
  "doccraft-theme",
@@ -1827,7 +1827,7 @@ dependencies = [
 
 [[package]]
 name = "doccraft-md"
-version = "3.4.0"
+version = "3.4.1"
 dependencies = [
  "craft-ui",
  "doccraft-theme",
@@ -1837,7 +1837,7 @@ dependencies = [
 
 [[package]]
 name = "doccraft-notes"
-version = "3.4.0"
+version = "3.4.1"
 dependencies = [
  "craft-ui",
  "doccraft-theme",
@@ -1848,14 +1848,14 @@ dependencies = [
 
 [[package]]
 name = "doccraft-theme"
-version = "3.4.0"
+version = "3.4.1"
 dependencies = [
  "egui",
 ]
 
 [[package]]
 name = "doccraft-typeset"
-version = "3.4.0"
+version = "3.4.1"
 dependencies = [
  "craft-ui",
  "doccraft-theme",
