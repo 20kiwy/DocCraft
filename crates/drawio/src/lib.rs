@@ -11,11 +11,13 @@
 //! - [`xmlio`]      — lossless `.drawio` XML reading/writing
 //! - [`style`]      — mxGraph style-string parsing/editing, swatches, arrows
 //! - [`shapes`]     — the shape library catalog + geometry painters
+//! - [`colorpicker`]- the FigCraft-style colour picker popover
 //! - [`canvas`]     — the drawing canvas (interaction, routing, guides, minimap)
 //! - [`ui`]         — the editor shell (menus, toolbar, panels, dialogs)
 //! - [`export`]     — SVG / PNG / PDF export of a page
 
 pub mod canvas;
+pub mod colorpicker;
 pub mod connection;
 pub mod export;
 pub mod model;

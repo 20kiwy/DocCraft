@@ -134,7 +134,7 @@ fn js(v: &Option<f32>) -> String {
 fn main() -> eframe::Result {
     let opts = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1100.0, 760.0])
+            .with_inner_size([1280.0, 860.0])
             .with_decorations(false),
         ..Default::default()
     };

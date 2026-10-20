@@ -28,6 +28,10 @@ shot() { ffmpeg -loglevel error -f x11grab -video_size 1280x860 -i :99 -frames:v
 
 pkill -9 -f connect-demo 2>/dev/null; sleep 0.3
 pkill -f "Xvfb :99" 2>/dev/null; sleep 0.5
+# eframe persists the demo window size per app-id and restores it over the
+# requested viewport — a stale 1100x760 entry used to park the edge endpoint
+# under the format panel and break the endpoint drag. Start clean.
+rm -rf ~/.local/share/drawioconnectdemo
 (Xvfb :99 -screen 0 1280x860x24 &); sleep 1.5
 rm -f "$OUT"
 

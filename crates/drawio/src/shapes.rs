@@ -444,7 +444,239 @@ pub const LIB: &[Cat] = &[
             sh!("Venn Three", "shape=venn3;fillColor=#d5e8d4;strokeColor=#82b366;whiteSpace=wrap;html=1;", 120.0, 100.0),
         ],
     },
+    // ── More Shapes dialog libraries (off by default, toggled in the dialog) ──
+    Cat {
+        name: "OpenStack",
+        items: &[
+            sh!("Compute", "shape=cube;fillColor=#f8cecc;strokeColor=#b85450;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;darkOpacity=0.05;", 90.0, 70.0),
+            sh!("Object Storage", "shape=cylinder3;fillColor=#f8cecc;strokeColor=#b85450;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;", 60.0, 80.0),
+            sh!("Block Storage", "shape=cylinder3;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;", 60.0, 80.0),
+            sh!("Image Service", "shape=note;fillColor=#f8cecc;strokeColor=#b85450;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;", 70.0, 70.0),
+            sh!("Identity", "shape=folder;fillColor=#f8cecc;strokeColor=#b85450;tabWidth=60;tabHeight=20;tabPosition=left;whiteSpace=wrap;html=1;", 90.0, 70.0),
+            sh!("Dashboard", "shape=monitor;fillColor=#f8cecc;strokeColor=#b85450;whiteSpace=wrap;html=1;", 80.0, 70.0),
+            sh!("Networking", "shape=router;fillColor=#f8cecc;strokeColor=#b85450;whiteSpace=wrap;html=1;", 80.0, 50.0),
+            sh!("Orchestration", "rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;html=1;", 100.0, 60.0),
+            sh!("Telemetry", "ellipse;shape=eventTimer;fillColor=#f8cecc;strokeColor=#b85450;whiteSpace=wrap;html=1;aspect=fixed;", 40.0, 40.0),
+            sh!("Database", "shape=cylinder3;fillColor=#f5f5f5;strokeColor=#666666;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;", 60.0, 80.0),
+        ],
+    },
+    Cat {
+        name: "Rack",
+        items: &[
+            sh!("Rack Frame", "rounded=0;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;whiteSpace=wrap;html=1;", 60.0, 160.0),
+            sh!("Rack Server", "shape=server;fillColor=#f5f5f5;strokeColor=#666666;whiteSpace=wrap;html=1;", 70.0, 80.0),
+            sh!("Storage Array", "shape=storage;fillColor=#bac8d3;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;", 70.0, 70.0),
+            sh!("ToR Switch", "shape=switchDev;fillColor=#f5f5f5;strokeColor=#666666;whiteSpace=wrap;html=1;", 90.0, 40.0),
+            sh!("Rack Router", "shape=router;fillColor=#f5f5f5;strokeColor=#666666;whiteSpace=wrap;html=1;", 80.0, 50.0),
+            sh!("Patch Panel", "rounded=0;fillColor=#bac8d3;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;", 120.0, 20.0),
+            sh!("UPS", "shape=cube;fillColor=#f5f5f5;strokeColor=#666666;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;darkOpacity=0.05;", 80.0, 60.0),
+            sh!("Blade Chassis", "shape=browser;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;whiteSpace=wrap;html=1;", 120.0, 80.0),
+        ],
+    },
+    Cat {
+        name: "SAP",
+        items: &[
+            sh!("SAP System", "rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;", 110.0, 60.0),
+            sh!("SAP Database", "shape=cylinder3;fillColor=#dae8fc;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;", 60.0, 80.0),
+            sh!("SAP Portal", "shape=monitor;fillColor=#dae8fc;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;", 80.0, 70.0),
+            sh!("SAP Gateway", "shape=hexagon;perimeter=hexagonPerimeter2;fillColor=#dae8fc;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;fixedSize=1;", 110.0, 60.0),
+            sh!("SAP Mobile", "shape=phone;fillColor=#dae8fc;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;", 40.0, 80.0),
+            sh!("SAP Cloud", "ellipse;shape=cloud;fillColor=#dae8fc;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;", 120.0, 80.0),
+            sh!("SAP Integration", "shape=doubleArrow;fillColor=#dae8fc;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;arrowWidth=0.5;arrowSize=0.4;", 110.0, 60.0),
+            sh!("SAP Analytics", "shape=display;fillColor=#dae8fc;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;", 110.0, 70.0),
+            sh!("SAP Fiori", "shape=browser;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;whiteSpace=wrap;html=1;", 130.0, 90.0),
+        ],
+    },
+    Cat {
+        name: "Veeam",
+        items: &[
+            sh!("Backup Job", "rounded=1;fillColor=#d5e8d4;strokeColor=#82b366;whiteSpace=wrap;html=1;", 110.0, 60.0),
+            sh!("Backup Repository", "shape=cylinder3;fillColor=#d5e8d4;strokeColor=#82b366;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;", 60.0, 80.0),
+            sh!("Backup Proxy", "shape=server;fillColor=#d5e8d4;strokeColor=#82b366;whiteSpace=wrap;html=1;", 70.0, 80.0),
+            sh!("vSphere Host", "shape=monitor;fillColor=#d5e8d4;strokeColor=#82b366;whiteSpace=wrap;html=1;", 80.0, 70.0),
+            sh!("Agent", "shape=phone;fillColor=#d5e8d4;strokeColor=#82b366;whiteSpace=wrap;html=1;", 40.0, 80.0),
+            sh!("Tape Library", "shape=storage;fillColor=#d5e8d4;strokeColor=#82b366;whiteSpace=wrap;html=1;", 70.0, 70.0),
+            sh!("Cloud Repository", "ellipse;shape=cloud;fillColor=#d5e8d4;strokeColor=#82b366;whiteSpace=wrap;html=1;", 120.0, 80.0),
+            sh!("Instant Recovery", "ellipse;shape=eventEnd;fillColor=#d5e8d4;strokeColor=#82b366;whiteSpace=wrap;html=1;aspect=fixed;", 40.0, 40.0),
+            sh!("Replication", "shape=doubleArrow;fillColor=#d5e8d4;strokeColor=#82b366;whiteSpace=wrap;html=1;arrowWidth=0.5;arrowSize=0.4;", 110.0, 60.0),
+        ],
+    },
+    Cat {
+        name: "VMware",
+        items: &[
+            sh!("ESXi Host", "shape=server;fillColor=#b0e3e6;strokeColor=#106e8b;whiteSpace=wrap;html=1;", 70.0, 80.0),
+            sh!("vCenter Server", "shape=monitor;fillColor=#b0e3e6;strokeColor=#106e8b;whiteSpace=wrap;html=1;", 80.0, 70.0),
+            sh!("Datastore", "shape=cylinder3;fillColor=#b0e3e6;strokeColor=#106e8b;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;", 60.0, 80.0),
+            sh!("Virtual Machine", "shape=browser;fillColor=#b0e3e6;strokeColor=#106e8b;verticalAlign=top;whiteSpace=wrap;html=1;", 120.0, 80.0),
+            sh!("Cluster", "shape=group;fillColor=none;strokeColor=#106e8b;dashed=1;whiteSpace=wrap;html=1;", 130.0, 90.0),
+            sh!("vSwitch", "shape=switchDev;fillColor=#b0e3e6;strokeColor=#106e8b;whiteSpace=wrap;html=1;", 90.0, 40.0),
+            sh!("VM Template", "shape=note;fillColor=#b0e3e6;strokeColor=#106e8b;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;", 70.0, 70.0),
+            sh!("Port Group", "shape=router;fillColor=#b0e3e6;strokeColor=#106e8b;whiteSpace=wrap;html=1;", 80.0, 50.0),
+            sh!("vSAN", "shape=cube;fillColor=#b0e3e6;strokeColor=#106e8b;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;darkOpacity=0.05;", 80.0, 70.0),
+        ],
+    },
+    Cat {
+        name: "ArchiMate 3.2",
+        items: &[
+            sh!("Actor", "shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;verticalAlign=top;html=1;outlineConnect=0;", 30.0, 60.0),
+            sh!("Business Role", "rounded=0;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;html=1;verticalAlign=top;", 100.0, 60.0),
+            sh!("Business Service", "ellipse;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;html=1;", 100.0, 50.0),
+            sh!("Business Process", "rounded=1;shape=subprocess;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;html=1;", 110.0, 60.0),
+            sh!("Business Event", "ellipse;shape=eventInter;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;html=1;aspect=fixed;", 40.0, 40.0),
+            sh!("Business Object", "shape=note;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;", 70.0, 70.0),
+            sh!("Application Component", "shape=component;fillColor=#bac8d3;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;", 110.0, 60.0),
+            sh!("Application Function", "rounded=1;fillColor=#bac8d3;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;", 110.0, 60.0),
+            sh!("Data Object", "shape=note;fillColor=#bac8d3;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;", 70.0, 70.0),
+            sh!("Node", "shape=cube;fillColor=#bac8d3;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;darkOpacity=0.05;", 90.0, 70.0),
+            sh!("Device", "shape=cube;fillColor=#f5f5f5;strokeColor=#666666;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;darkOpacity=0.05;", 90.0, 70.0),
+            sh!("Artifact", "shape=note;fillColor=#f5f5f5;strokeColor=#666666;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;", 70.0, 90.0),
+        ],
+    },
+    Cat {
+        name: "ArchiMate 2.1",
+        items: &[
+            sh!("Actor", "shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;verticalAlign=top;html=1;outlineConnect=0;", 30.0, 60.0),
+            sh!("Role", "rounded=0;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;html=1;verticalAlign=top;", 100.0, 60.0),
+            sh!("Service", "ellipse;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;html=1;", 100.0, 50.0),
+            sh!("Process", "rounded=1;shape=subprocess;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;html=1;", 110.0, 60.0),
+            sh!("Component", "shape=component;fillColor=#bac8d3;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;", 110.0, 60.0),
+            sh!("Node", "shape=cube;fillColor=#bac8d3;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;darkOpacity=0.05;", 90.0, 70.0),
+            sh!("Product", "shape=folder;fillColor=#ffe6cc;strokeColor=#d79b00;tabWidth=60;tabHeight=20;tabPosition=left;whiteSpace=wrap;html=1;", 100.0, 70.0),
+        ],
+    },
+    Cat {
+        name: "BPMN 2.0",
+        items: &[
+            sh!("Message Throw", "ellipse;shape=eventMsg;fillColor=#fff2cc;strokeColor=#d6b656;whiteSpace=wrap;html=1;aspect=fixed;", 40.0, 40.0),
+            sh!("Signal Throw", "ellipse;shape=warning;fillColor=#fff2cc;strokeColor=#d6b656;whiteSpace=wrap;html=1;aspect=fixed;", 40.0, 40.0),
+            sh!("Escalation", "ellipse;shape=warning;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;html=1;aspect=fixed;", 40.0, 40.0),
+            sh!("Terminate", "ellipse;shape=eventEnd;fillColor=#f8cecc;strokeColor=#b85450;whiteSpace=wrap;html=1;aspect=fixed;", 40.0, 40.0),
+            sh!("Conditional", "shape=display;fillColor=#fff2cc;strokeColor=#d6b656;whiteSpace=wrap;html=1;", 100.0, 60.0),
+            sh!("Link Event", "ellipse;shape=eventInter;fillColor=#fff2cc;strokeColor=#d6b656;whiteSpace=wrap;html=1;aspect=fixed;", 40.0, 40.0),
+            sh!("Compensation", "ellipse;shape=eventInter;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;html=1;aspect=fixed;", 40.0, 40.0),
+            sh!("Data Object", "shape=note;fillColor=#ffffff;strokeColor=#000000;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;", 60.0, 70.0),
+            sh!("Data Store", "shape=cylinder3;fillColor=#ffffff;strokeColor=#000000;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;", 60.0, 70.0),
+            sh!("Pool", "swimlane;fontStyle=1;align=center;verticalAlign=middle;horizontal=0;startSize=20;horizontalStack=0;resizeParent=1;collapsible=0;html=1;", 400.0, 160.0),
+            sh!("Lane", "swimlane;horizontal=0;startSize=20;html=1;", 160.0, 200.0),
+            sh!("Group", "shape=group;dashed=1;fillColor=none;strokeColor=#999999;whiteSpace=wrap;html=1;", 140.0, 110.0),
+            sh!("Text Annotation", "text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;html=1;", 90.0, 40.0),
+        ],
+    },
+    Cat {
+        name: "SysML",
+        items: &[
+            sh!("Block", "shape=titleBar;verticalAlign=middle;fontStyle=1;fillColor=#dae8fc;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;", 110.0, 60.0),
+            sh!("Requirement", "shape=note;fillColor=#dae8fc;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;", 90.0, 70.0),
+            sh!("Package", "shape=folder;fillColor=#dae8fc;strokeColor=#6c8ebf;tabWidth=60;tabHeight=20;tabPosition=left;whiteSpace=wrap;html=1;", 100.0, 70.0),
+            sh!("Constraint", "shape=parallelogram;perimeter=parallelogramPerimeter;fillColor=#dae8fc;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;fixedSize=1;", 110.0, 60.0),
+            sh!("Activity", "rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;", 110.0, 60.0),
+            sh!("State", "rounded=1;arcSize=40;fillColor=#dae8fc;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;", 100.0, 50.0),
+            sh!("Port", "rounded=0;fillColor=#dae8fc;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;aspect=fixed;", 20.0, 20.0),
+            sh!("Item Flow", "shape=singleArrow;fillColor=#dae8fc;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;arrowWidth=0.5;arrowSize=0.4;", 100.0, 50.0),
+            sh!("Part Property", "shape=cube;fillColor=#dae8fc;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;darkOpacity=0.05;", 90.0, 70.0),
+            sh!("BDD Frame", "shape=umlFrame;fillColor=none;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;", 150.0, 110.0),
+        ],
+    },
+    Cat {
+        name: "Value Stream Mapping",
+        items: &[
+            sh!("Supplier", "rounded=0;fillColor=#fff2cc;strokeColor=#d6b656;whiteSpace=wrap;html=1;verticalAlign=top;", 90.0, 60.0),
+            sh!("Process Box", "rounded=0;fillColor=#ffffff;strokeColor=#000000;whiteSpace=wrap;html=1;verticalAlign=top;", 90.0, 70.0),
+            sh!("Inventory", "triangle;direction=south;fillColor=#fff2cc;strokeColor=#d6b656;whiteSpace=wrap;html=1;", 70.0, 50.0),
+            sh!("Shipment", "shape=doubleArrow;fillColor=#fff2cc;strokeColor=#d6b656;whiteSpace=wrap;html=1;arrowWidth=0.5;arrowSize=0.4;", 100.0, 50.0),
+            sh!("Push Arrow", "shape=singleArrow;fillColor=#fff2cc;strokeColor=#d6b656;whiteSpace=wrap;html=1;arrowWidth=0.5;arrowSize=0.4;", 100.0, 50.0),
+            sh!("Electronic Info", "shape=doubleArrow;dashed=1;fillColor=none;strokeColor=#666666;whiteSpace=wrap;html=1;arrowWidth=0.5;arrowSize=0.4;", 100.0, 50.0),
+            sh!("Manual Info", "line;strokeWidth=2;fillColor=none;dashed=1;align=left;verticalAlign=middle;html=1;", 100.0, 10.0),
+            sh!("Data Box", "shape=internalStorage;fillColor=#fff2cc;strokeColor=#d6b656;whiteSpace=wrap;html=1;backgroundOutline=1;", 90.0, 70.0),
+            sh!("Kanban", "shape=note;fillColor=#fff2cc;strokeColor=#d6b656;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;", 70.0, 60.0),
+            sh!("Operator", "shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;verticalAlign=top;html=1;outlineConnect=0;", 30.0, 60.0),
+            sh!("Timeline", "line;strokeWidth=2;fillColor=none;align=left;verticalAlign=middle;html=1;", 120.0, 10.0),
+        ],
+    },
+    Cat {
+        name: "Cabinets",
+        items: &[
+            sh!("Base Cabinet", "shape=cube;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;darkOpacity=0.05;", 90.0, 70.0),
+            sh!("Wall Cabinet", "shape=cube;fillColor=#fff2cc;strokeColor=#d6b656;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;darkOpacity=0.05;", 90.0, 60.0),
+            sh!("Drawer Unit", "shape=internalStorage;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;html=1;backgroundOutline=1;", 90.0, 80.0),
+            sh!("Shelf", "line;strokeWidth=2;fillColor=none;align=left;verticalAlign=middle;html=1;", 110.0, 10.0),
+            sh!("Wardrobe", "rounded=0;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;html=1;verticalAlign=top;", 70.0, 140.0),
+            sh!("Nightstand", "shape=cube;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;darkOpacity=0.05;", 60.0, 50.0),
+            sh!("Desk", "rounded=0;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;html=1;", 130.0, 50.0),
+            sh!("Cupboard", "shape=browser;fillColor=#ffe6cc;strokeColor=#d79b00;verticalAlign=top;whiteSpace=wrap;html=1;", 100.0, 110.0),
+            sh!("Pantry", "rounded=0;fillColor=#fff2cc;strokeColor=#d6b656;whiteSpace=wrap;html=1;verticalAlign=top;", 70.0, 130.0),
+        ],
+    },
+    Cat {
+        name: "Infographic",
+        items: &[
+            sh!("Pie Chart", "shape=venn2;fillColor=#ffd966;strokeColor=#d6b656;whiteSpace=wrap;html=1;", 110.0, 80.0),
+            sh!("Ring Percent", "shape=ring;fillColor=#ffd966;strokeColor=#d6b656;whiteSpace=wrap;html=1;", 70.0, 70.0),
+            sh!("Bar Chart", "shape=tableGrid;fillColor=#ffd966;strokeColor=#d6b656;verticalAlign=top;whiteSpace=wrap;html=1;", 110.0, 80.0),
+            sh!("Funnel", "shape=trapezoid;perimeter=trapezoidPerimeter;fillColor=#ffd966;strokeColor=#d6b656;whiteSpace=wrap;html=1;fixedSize=1;", 110.0, 60.0),
+            sh!("Pyramid", "triangle;direction=north;fillColor=#ffd966;strokeColor=#d6b656;whiteSpace=wrap;html=1;", 90.0, 70.0),
+            sh!("Step Arrow", "shape=singleArrow;fillColor=#ffd966;strokeColor=#d6b656;whiteSpace=wrap;html=1;arrowWidth=0.5;arrowSize=0.4;", 100.0, 50.0),
+            sh!("Milestone", "ellipse;shape=eventStart;fillColor=#ffd966;strokeColor=#d6b656;whiteSpace=wrap;html=1;aspect=fixed;", 40.0, 40.0),
+            sh!("Trend Line", "line;strokeWidth=2;fillColor=none;align=left;verticalAlign=middle;html=1;", 110.0, 10.0),
+            sh!("Target", "shape=ring;fillColor=#f8cecc;strokeColor=#b85450;whiteSpace=wrap;html=1;", 70.0, 70.0),
+            sh!("Star", "shape=star;fillColor=#ffd966;strokeColor=#d6b656;whiteSpace=wrap;html=1;", 70.0, 70.0),
+        ],
+    },
+    Cat {
+        name: "EIP",
+        items: &[
+            sh!("Message Channel", "line;strokeWidth=2;fillColor=none;align=left;verticalAlign=middle;html=1;", 110.0, 10.0),
+            sh!("Messaging Gateway", "shape=component;fillColor=#e1d5e7;strokeColor=#9673a6;whiteSpace=wrap;html=1;", 110.0, 60.0),
+            sh!("Content Filter", "shape=hexagon;perimeter=hexagonPerimeter2;fillColor=#e1d5e7;strokeColor=#9673a6;whiteSpace=wrap;html=1;fixedSize=1;", 110.0, 60.0),
+            sh!("Message Router", "shape=router;fillColor=#e1d5e7;strokeColor=#9673a6;whiteSpace=wrap;html=1;", 80.0, 50.0),
+            sh!("Message Translator", "shape=parallelogram;perimeter=parallelogramPerimeter;fillColor=#e1d5e7;strokeColor=#9673a6;whiteSpace=wrap;html=1;fixedSize=1;", 110.0, 60.0),
+            sh!("Point-to-Point Channel", "shape=queue;fillColor=#e1d5e7;strokeColor=#9673a6;whiteSpace=wrap;html=1;", 100.0, 50.0),
+            sh!("Splitter", "shape=doubleArrow;fillColor=#e1d5e7;strokeColor=#9673a6;whiteSpace=wrap;html=1;arrowWidth=0.5;arrowSize=0.4;", 100.0, 50.0),
+            sh!("Aggregator", "shape=collate;fillColor=#e1d5e7;strokeColor=#9673a6;whiteSpace=wrap;html=1;", 80.0, 80.0),
+            sh!("Message Envelope", "ellipse;shape=eventMsg;fillColor=#e1d5e7;strokeColor=#9673a6;whiteSpace=wrap;html=1;aspect=fixed;", 40.0, 40.0),
+            sh!("Endpoint", "ellipse;fillColor=#e1d5e7;strokeColor=#9673a6;whiteSpace=wrap;html=1;aspect=fixed;", 40.0, 40.0),
+        ],
+    },
+    Cat {
+        name: "Electrical",
+        items: &[
+            sh!("Battery", "line;strokeWidth=3;fillColor=none;align=left;verticalAlign=middle;html=1;", 90.0, 12.0),
+            sh!("Resistor", "shape=parallelogram;perimeter=parallelogramPerimeter;fillColor=#f5f5f5;strokeColor=#666666;whiteSpace=wrap;html=1;fixedSize=1;", 100.0, 40.0),
+            sh!("Capacitor", "line;strokeWidth=3;fillColor=none;align=left;verticalAlign=middle;html=1;direction=north;", 12.0, 90.0),
+            sh!("Switch", "shape=switchDev;fillColor=#f5f5f5;strokeColor=#666666;whiteSpace=wrap;html=1;", 90.0, 40.0),
+            sh!("Lamp", "ellipse;fillColor=#fff2cc;strokeColor=#d6b656;whiteSpace=wrap;html=1;aspect=fixed;", 50.0, 50.0),
+            sh!("Motor", "shape=cylinder3;fillColor=#f5f5f5;strokeColor=#666666;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;", 60.0, 70.0),
+            sh!("Ground", "line;strokeWidth=2;fillColor=none;align=left;verticalAlign=middle;html=1;", 70.0, 10.0),
+            sh!("Generator", "shape=cylinder3;fillColor=#bac8d3;strokeColor=#6c8ebf;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;", 60.0, 80.0),
+            sh!("Transformer", "shape=cube;fillColor=#f5f5f5;strokeColor=#666666;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;darkOpacity=0.05;", 90.0, 70.0),
+            sh!("Fuse", "rounded=0;fillColor=#f8cecc;strokeColor=#b85450;whiteSpace=wrap;html=1;", 100.0, 30.0),
+            sh!("Wire", "line;strokeWidth=2;fillColor=none;align=left;verticalAlign=middle;html=1;", 100.0, 10.0),
+            sh!("Terminal", "ellipse;fillColor=#f5f5f5;strokeColor=#666666;whiteSpace=wrap;html=1;aspect=fixed;", 24.0, 24.0),
+        ],
+    },
 ];
+
+/// More-Shapes dialog layout: `(group header, [category names])`. An empty
+/// header renders as the top-level section (no group label).
+pub const DIALOG_GROUPS: &[(&str, &[&str])] = &[
+    (
+        "",
+        &[
+            "General", "Basic", "Arrows", "UML", "ER", "Flowchart", "BPMN", "Software", "Networks", "Mockups", "Tables", "Titles", "Signs", "Misc",
+            "OpenStack", "Rack", "SAP", "Veeam", "VMware",
+        ],
+    ),
+    ("Business", &["ArchiMate 3.2", "ArchiMate 2.1", "BPMN 2.0", "SysML", "Value Stream Mapping"]),
+    ("Other", &["Cabinets", "Infographic", "EIP", "Electrical"]),
+];
+
+/// Categories enabled on the palette by default: the original 14, exactly.
+pub const DEFAULT_ENABLED: usize = 14;
+
+/// LIB index of a category by name (More-Shapes dialog wiring).
+pub fn cat_index(name: &str) -> Option<usize> {
+    LIB.iter().position(|c| c.name == name)
+}
 
 /// Count of categories (for fixed-size open/close state arrays).
 pub const CATS: usize = LIB.len();

@@ -5,6 +5,7 @@
 //! The drawing surface itself lives in [`crate::canvas`]; the model in
 //! [`crate::model`]; file I/O in [`crate::xmlio`].
 
+use crate::colorpicker;
 use crate::canvas::{self, CtxMenu};
 use crate::connection::ConnectState;
 use crate::model::{Cell, Diagram, MxFile};
@@ -76,7 +77,10 @@ fn shape_cell(ui: &mut Ui, id: Id, size: Vec2, name: &str, st: &str, w: f32, h: 
     let fill = if resp.hovered() || resp.dragged() { t.hover } else { t.panel };
     ui.painter().rect_filled(rect, CornerRadius::same(5), fill);
     ui.painter().rect_stroke(rect, CornerRadius::same(5), Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
-    // mini preview through the real painter
+    // mini preview through the real painter. Palette previews carry no text
+    // (drawio parity — the name lives in the tooltip), except text-only shapes
+    // whose label IS the shape. Long names squeezed into 44px cells used to
+    // overflow the previews badly.
     let look = style::vertex_look(st, 1.0);
     let inner = rect.shrink(6.0);
     let aspect = w / h.max(1.0);
@@ -87,7 +91,8 @@ fn shape_cell(ui: &mut Ui, id: Id, size: Vec2, name: &str, st: &str, w: f32, h: 
     };
     let pr = Rect::from_center_size(rect.center(), Vec2::new(pw, ph));
     let xf = shapes::Xf::from_style(st);
-    shapes::paint_vertex(ui.painter(), pr, st, &look, name, &xf);
+    let is_text = st.starts_with("text;") || st.contains("shape=text;");
+    shapes::paint_vertex(ui.painter(), pr, st, &look, if is_text { name } else { "" }, &xf);
     (rect, resp)
 }
 
@@ -244,6 +249,27 @@ pub struct DrawApp {
     export_border: f32,
     export_transparent: bool,
     export_crop: bool,
+
+    // ── More Shapes dialog (drawio parity) ──
+    more_open: bool,
+    more_query: String,
+    /// Library highlighted in the dialog's preview pane.
+    more_sel: usize,
+    /// Staged checkbox state inside the dialog (applied on Apply).
+    more_checked: HashSet<usize>,
+    /// "Labels" checkbox: on insert, use the shape name as its label.
+    more_labels: bool,
+    /// "Remember this setting" checkbox.
+    more_remember: bool,
+    /// Categories shown on the palette (the More Shapes › Apply result).
+    palette_enabled: HashSet<usize>,
+    /// Lazy one-shot load of the remembered palette from egui storage.
+    palette_loaded: bool,
+
+    // ── FigCraft-style colour picker (crate::colorpicker) ──
+    pub(crate) picker: Option<colorpicker::Pick>,
+    /// Recently picked colours (picker footer).
+    pub(crate) recent_colors: Vec<Color32>,
 }
 
 impl Default for DrawApp {
@@ -304,6 +330,16 @@ impl DrawApp {
             export_border: 10.0,
             export_transparent: false,
             export_crop: false,
+            more_open: false,
+            more_query: String::new(),
+            more_sel: 0,
+            more_checked: HashSet::new(),
+            more_labels: false,
+            more_remember: false,
+            palette_enabled: (0..shapes::DEFAULT_ENABLED).collect(),
+            palette_loaded: false,
+            picker: None,
+            recent_colors: Vec::new(),
         }
     }
 
@@ -842,12 +878,15 @@ impl DrawApp {
     // ── shapes palette insert ────────────────────────────────────────────────
 
     fn insert_shape(&mut self, def: &shapes::ShapeDef) {
-        self.insert_shape_styled(def.name, def.style, def.w, def.h, None);
+        self.insert_shape_styled(def.name, def.style, def.w, def.h, None, self.more_labels);
     }
 
     /// Insert a shape (style string + default size), centered on `at` (or the
-    /// view center when `None`), snapped to the grid.
-    fn insert_shape_styled(&mut self, name: &str, st: &str, w: f32, h: f32, at: Option<Pos2>) {
+    /// view center when `None`), snapped to the grid. `with_label` = the shape
+    /// name becomes its label (More Shapes › Labels); drawio drops shapes
+    /// unlabelled by default, so the palette passes the checkbox state and
+    /// only the Scratchpad always keeps its value.
+    fn insert_shape_styled(&mut self, name: &str, st: &str, w: f32, h: f32, at: Option<Pos2>, with_label: bool) {
         if self
             .page()
             .layer_locked(&Cell { layer: self.active_layer(), vertex: true, ..Cell::default() })
@@ -861,8 +900,9 @@ impl DrawApp {
         let y = ((center.y - h / 2.0) / self.grid).round() * self.grid;
         let layer = self.active_layer();
         let (name, st) = (name.to_string(), st.to_string());
+        let value = if with_label { name.clone() } else { String::new() };
         let id = self.edit_page(|page| {
-            let id = page.add_vertex(&name, &st, x, y, w, h);
+            let id = page.add_vertex(&value, &st, x, y, w, h);
             if let Some(c) = page.cell_mut(&id) {
                 c.layer = layer.clone();
             }
@@ -1449,6 +1489,18 @@ impl DrawApp {
 
     fn palette_panel(&mut self, ui: &mut Ui) {
         let t = Tokens::get(ui.ctx());
+        // Pin the More Shapes button to the bottom of the palette (drawio
+        // parity): the bottom strip is claimed before the scroll area, so the
+        // button stays visible no matter how long the shape list is.
+        egui::Panel::bottom("draw_palette_more")
+            .resizable(false)
+            .frame(egui::Frame::default().fill(t.panel).inner_margin(egui::Margin::symmetric(0, 4)))
+            .show_inside(ui, |ui| {
+                if Self::more_shapes_button(ui, &t) {
+                    self.more_checked = self.palette_enabled.clone();
+                    self.more_open = true;
+                }
+            });
         egui::Panel::left("draw_palette")
             .resizable(true)
             .default_size(216.0)
@@ -1488,6 +1540,13 @@ impl DrawApp {
 
     fn palette(&mut self, ui: &mut Ui) {
         let t = Tokens::get(ui.ctx());
+        // One-shot restore of a remembered palette (More Shapes › Remember).
+        if !self.palette_loaded {
+            self.palette_loaded = true;
+            if let Some(s) = ui.ctx().data_mut(|d| d.get_persisted::<HashSet<usize>>(Id::new("draw_palette_enabled"))) {
+                self.palette_enabled = s;
+            }
+        }
         ui.label(egui::RichText::new("SHAPES").size(CAPTION).strong().color(t.text_secondary));
         ui.add_space(2.0);
         ui.add(egui::TextEdit::singleline(&mut self.palette_query).hint_text("Search shapes…").desired_width(ui.available_width()));
@@ -1506,7 +1565,9 @@ impl DrawApp {
             ui.add_space(4.0);
 
             if q.is_empty() {
-                for (gi, cat) in shapes::LIB.iter().enumerate() {
+                let enabled: Vec<usize> = (0..shapes::LIB.len()).filter(|i| self.palette_enabled.contains(i)).collect();
+                for gi in enabled {
+                    let cat = &shapes::LIB[gi];
                     let open = self.palette_open.contains(&gi);
                     let header = ui
                         .allocate_exact_size(Vec2::new(ui.available_width(), 22.0), Sense::click())
@@ -1547,9 +1608,11 @@ impl DrawApp {
                     }
                 }
             } else {
-                // search across all categories
+                // search across all enabled categories
                 let mut n = 0;
-                for (gi, cat) in shapes::LIB.iter().enumerate() {
+                let enabled: Vec<usize> = (0..shapes::LIB.len()).filter(|i| self.palette_enabled.contains(i)).collect();
+                for gi in enabled {
+                    let cat = &shapes::LIB[gi];
                     let hits: Vec<&shapes::ShapeDef> =
                         cat.items.iter().filter(|d| d.name.to_lowercase().contains(&q)).collect();
                     if hits.is_empty() {
@@ -1564,6 +1627,149 @@ impl DrawApp {
                 }
             }
         });
+    }
+
+    /// The More Shapes button pinned to the palette bottom — the light accent
+    /// pill from diagrams.net ("+ More Shapes" above the Layers list).
+    fn more_shapes_button(ui: &mut Ui, t: &Tokens) -> bool {
+        let width = ui.available_width();
+        let (r, resp) = ui.allocate_exact_size(Vec2::new(width, 24.0), Sense::click());
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "More Shapes"));
+        let bg = if resp.hovered() { t.accent.gamma_multiply(0.30) } else { t.accent.gamma_multiply(0.16) };
+        ui.painter().rect_filled(r, CornerRadius::same(5), bg);
+        ui.painter().text(r.center(), Align2::CENTER_CENTER, "+ More Shapes", FontId::proportional(11.0), t.accent);
+        resp.on_hover_text("Browse and enable more shape libraries").clicked()
+    }
+
+    /// The More Shapes dialog: a searchable checklist of every library with a
+    /// live preview grid — diagrams.net's MoreShapesDialog on the shared
+    /// FigCraft design language. Apply moves the checked libraries onto the
+    /// palette; "Remember this setting" persists it across restarts.
+    fn more_shapes_dialog(&mut self, ctx: &egui::Context, t: &Tokens) {
+        if !self.more_open {
+            return;
+        }
+        let mut open = true;
+        let mut apply = false;
+        let mut cancel = false;
+        egui::Window::new("Shapes")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .default_size(Vec2::new(690.0, 460.0))
+            .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+            .frame(
+                egui::Frame::window(&ctx.global_style())
+                    .fill(t.panel)
+                    .stroke(doccraft_theme::hairline(t))
+                    .corner_radius(8.0),
+            )
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    // ── left: search + library checklist ──
+                    ui.vertical(|ui| {
+                        ui.set_width(206.0);
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.more_query)
+                                .hint_text("Search…")
+                                .desired_width(ui.available_width()),
+                        );
+                        ui.add_space(2.0);
+                        let q = self.more_query.trim().to_lowercase();
+                        egui::ScrollArea::vertical().id_salt("more_shapes_libs").show(ui, |ui| {
+                            for (group, names) in shapes::DIALOG_GROUPS {
+                                if !group.is_empty() {
+                                    ui.add_space(3.0);
+                                    ui.label(egui::RichText::new(*group).size(CAPTION).strong().color(t.text_secondary));
+                                }
+                                for name in names.iter() {
+                                    let Some(gi) = shapes::cat_index(name) else { continue };
+                                    if !q.is_empty() && !name.to_lowercase().contains(&q) {
+                                        continue;
+                                    }
+                                    let mut checked = self.more_checked.contains(&gi);
+                                    let resp = ui.checkbox(&mut checked, *name);
+                                    if resp.changed() {
+                                        if checked {
+                                            self.more_checked.insert(gi);
+                                        } else {
+                                            self.more_checked.remove(&gi);
+                                        }
+                                    }
+                                    // hovering (or checking) previews the library
+                                    if resp.hovered() || resp.clicked() {
+                                        self.more_sel = gi;
+                                    }
+                                }
+                            }
+                        });
+                    });
+                    ui.separator();
+                    // ── right: preview grid of the highlighted library ──
+                    ui.vertical(|ui| {
+                        let sel = self.more_sel.min(shapes::LIB.len() - 1);
+                        let cat = &shapes::LIB[sel];
+                        ui.label(egui::RichText::new(cat.name).strong().size(12.0).color(t.text));
+                        ui.add_space(2.0);
+                        egui::ScrollArea::vertical().id_salt("more_shapes_preview").show(ui, |ui| {
+                            let refs: Vec<&shapes::ShapeDef> = cat.items.iter().collect();
+                            ui.style_mut().spacing.item_spacing = Vec2::splat(4.0);
+                            let cols = 5;
+                            let cw = ((ui.available_width() - (cols - 1) as f32 * 4.0) / cols as f32).min(76.0);
+                            let ch = 56.0;
+                            let mut i = 0;
+                            while i < refs.len() {
+                                ui.horizontal(|ui| {
+                                    for (k, d) in refs.iter().skip(i).take(cols).enumerate() {
+                                        let id = Id::new(("draw_more_prev", sel, i + k));
+                                        let (rect, resp) = shape_cell(ui, id, Vec2::new(cw, ch), d.name, d.style, d.w, d.h, t);
+                                        if resp.clicked() {
+                                            self.insert_shape(d);
+                                        }
+                                        resp.on_hover_text(format!("{} — click to insert", d.name));
+                                        let _ = rect;
+                                    }
+                                });
+                                i += cols;
+                            }
+                        });
+                    });
+                });
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.more_labels, "Labels").on_hover_text("Add the shape's name as its label when a shape is inserted");
+                    ui.checkbox(&mut self.more_remember, "Remember this setting")
+                        .on_hover_text("Keep the enabled libraries for the next launch");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(egui::Button::new(egui::RichText::new("Apply").color(Color32::WHITE)).fill(t.accent).min_size(Vec2::new(84.0, 24.0)))
+                            .clicked()
+                        {
+                            apply = true;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            cancel = true;
+                        }
+                    });
+                });
+            });
+        if apply {
+            self.palette_enabled = self.more_checked.clone();
+            self.palette_open.retain(|gi| self.palette_enabled.contains(gi));
+            if self.more_remember {
+                ctx.data_mut(|d| d.insert_persisted(Id::new("draw_palette_enabled"), self.palette_enabled.clone()));
+            }
+            self.status = format!(
+                "Palette updated — {} of {} libraries shown",
+                self.palette_enabled.len(),
+                shapes::LIB.len()
+            );
+            self.more_open = false;
+        } else if cancel {
+            self.more_open = false;
+        } else {
+            self.more_open = open;
+        }
     }
 
     /// The pinned Scratchpad grid: click inserts, hover shows ✕ to remove,
@@ -1612,7 +1818,7 @@ impl DrawApp {
             self.scratch.remove(k);
         }
         if let Some((name, style, w, h)) = insert {
-            self.insert_shape_styled(&name, &style, w, h, None);
+            self.insert_shape_styled(&name, &style, w, h, None, true);
         }
     }
 
@@ -1688,7 +1894,7 @@ impl DrawApp {
                 && self.view_rect.is_some_and(|cv| cv.contains(p))
             {
                 let world = canvas::screen_to_world(self, p);
-                self.insert_shape_styled(&drag.name, &drag.style, drag.w, drag.h, Some(world));
+                self.insert_shape_styled(&drag.name, &drag.style, drag.w, drag.h, Some(world), self.more_labels);
                 self.status = format!("Dropped {} on the canvas", drag.name);
             }
         }
@@ -1891,12 +2097,8 @@ impl DrawApp {
             ui.label(egui::RichText::new("BACKGROUND").size(CAPTION).strong().color(t.text_secondary));
             ui.horizontal(|ui| {
                 let bg = self.page().background.clone();
-                let mut col = bg.as_deref().and_then(style::parse_color).unwrap_or(Color32::WHITE);
-                if ui.color_edit_button_srgb(&mut [col.r(), col.g(), col.b()]).changed() {
-                    let hex = style::color_hex(col);
-                    self.page_mut().background = Some(hex);
-                    self.file.dirty = true;
-                }
+                let cur = bg.as_deref().and_then(style::parse_color);
+                self.color_chip(ui, colorpicker::PickTarget::PageBackground, cur, "Background — open the colour picker");
                 if ui.button("None").clicked() {
                     self.page_mut().background = None;
                     self.file.dirty = true;
@@ -1937,6 +2139,12 @@ impl DrawApp {
     /// Apply one style-key change to every selected cell (undo-deduped).
     fn apply_style(&mut self, f: impl Fn(&mut String)) {
         self.push_undo();
+        self.apply_style_now(f);
+    }
+
+    /// Same as [`Self::apply_style`] but WITHOUT an undo entry — the colour
+    /// picker coalesces its own gesture (one undo per drag, not per frame).
+    pub(crate) fn apply_style_now(&mut self, f: impl Fn(&mut String)) {
         let a = self.file.active.min(self.file.diagrams.len() - 1);
         let page = &mut self.file.diagrams[a];
         let sel = self.selected.clone();
@@ -1973,6 +2181,29 @@ impl DrawApp {
         out
     }
 
+    /// A colour chip that toggles the FigCraft-style picker for `target`.
+    /// `cur = None` paints the drawio "none" swatch (transparent + strike).
+    fn color_chip(&mut self, ui: &mut Ui, target: colorpicker::PickTarget, cur: Option<Color32>, tip: &str) {
+        let open = self.picker.as_ref().is_some_and(|p| p.target == target);
+        let t = Tokens::get(ui.ctx());
+        let (r, resp) = ui.allocate_exact_size(Vec2::new(22.0, 22.0), Sense::click());
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tip));
+        ui.painter().rect_filled(r.shrink(2.0), CornerRadius::same(3), cur.unwrap_or(t.panel));
+        if cur.is_none() {
+            ui.painter().line_segment([r.left_bottom() + Vec2::new(3.0, -3.0), r.right_top() - Vec2::new(3.0, -3.0)], Stroke::new(1.5, t.danger));
+        }
+        ui.painter().rect_stroke(
+            r,
+            CornerRadius::same(4),
+            Stroke::new(if open { 2.0 } else { 1.0 }, if open { t.accent } else { t.border }),
+            egui::StrokeKind::Inside,
+        );
+        if resp.clicked() {
+            self.picker = if open { None } else { Some(colorpicker::Pick::new(target)) };
+        }
+        resp.on_hover_text(tip);
+    }
+
     fn style_tab(&mut self, ui: &mut Ui) {
         let t = Tokens::get(ui.ctx());
         let is_edge = self.page().cell(&self.selected[0]).map(|c| c.edge).unwrap_or(false);
@@ -1985,12 +2216,10 @@ impl DrawApp {
             self.apply_style(|s| *s = style::set(s, "fillColor", &hex));
         }
         ui.horizontal(|ui| {
-            let mut rgb = cur_fill.unwrap_or(Color32::WHITE);
-            if ui.color_edit_button_srgb(&mut [rgb.r(), rgb.g(), rgb.b()]).changed() {
-                let hex = style::color_hex(Color32::from_rgb(rgb.r(), rgb.g(), rgb.b()));
-                self.apply_style(|s| *s = style::set(s, "fillColor", &hex));
+            self.color_chip(ui, colorpicker::PickTarget::Fill, cur_fill, "Fill — open the colour picker");
+            if ui.button("None").on_hover_text("No fill").clicked() {
+                self.apply_style(|s| *s = style::set(s, "fillColor", "none"));
             }
-            ui.label(egui::RichText::new("custom").small().color(t.text_tertiary));
             let mut grad = style::get(&cur_style, "gradientColor").is_some();
             if ui.toggle_value(&mut grad, "Gradient").changed() {
                 if grad {
@@ -2015,6 +2244,7 @@ impl DrawApp {
             self.apply_style(|s| *s = style::set(s, "strokeColor", &hex));
         }
         ui.horizontal(|ui| {
+            self.color_chip(ui, colorpicker::PickTarget::Stroke, cur_stroke, "Line — open the colour picker");
             ui.label(egui::RichText::new("Width").small().color(t.text_secondary));
             let w = style::get_f32(&cur_style, "strokeWidth", 1.0);
             let mut w = w;
@@ -2292,6 +2522,10 @@ impl DrawApp {
             let hex = pick.unwrap_or_else(|| "#000000".into());
             self.apply_style(move |s| *s = style::set(s, "fontColor", &hex));
         }
+        ui.horizontal(|ui| {
+            self.color_chip(ui, colorpicker::PickTarget::Font, cur_fc, "Font — open the colour picker");
+            ui.label(egui::RichText::new("custom").small().color(t.text_tertiary));
+        });
         ui.add_space(4.0);
         ui.label(egui::RichText::new("ALIGN").size(CAPTION).strong().color(t.text_secondary));
         ui.horizontal(|ui| {
@@ -2686,12 +2920,8 @@ impl DrawApp {
                     ui.label(egui::RichText::new("BACKGROUND").size(CAPTION).strong().color(t.text_secondary));
                     ui.horizontal(|ui| {
                         let bg = self.page().background.clone();
-                        let mut col = bg.as_deref().and_then(style::parse_color).unwrap_or(Color32::WHITE);
-                        if ui.color_edit_button_srgb(&mut [col.r(), col.g(), col.b()]).changed() {
-                            let hex = style::color_hex(col);
-                            self.page_mut().background = Some(hex);
-                            self.file.dirty = true;
-                        }
+                        let cur = bg.as_deref().and_then(style::parse_color);
+                        self.color_chip(ui, colorpicker::PickTarget::PageBackground, cur, "Background — open the colour picker");
                         if ui.button("None").clicked() {
                             self.page_mut().background = None;
                             self.file.dirty = true;
@@ -2853,6 +3083,11 @@ impl DrawApp {
                 // keep editing — request keyboard focus on first open
             }
         }
+
+        // ── More Shapes dialog ──
+        self.more_shapes_dialog(ctx, &t);
+        // ── FigCraft-style colour picker popover ──
+        colorpicker::show(self, ctx);
 
         // ── Help › About Draw… ──
         let mut aopen = self.about_open;

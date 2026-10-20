@@ -14,7 +14,7 @@ members = [
 exclude = ["clone"]
 
 [workspace.package]
-version = "3.4.1"
+version = "3.5.0"
 edition = "2024"
 license = "MIT"
 
@@ -45,6 +45,7 @@ deckcraft-engine  = { path = "clone/deckcraft/crates/engine" }
 pdfcraft-ui-egui  = { path = "clone/pdfcraft/crates/ui-egui" }
 figcraft-ui-egui  = { path = "clone/figcraft/crates/ui-egui" }
 figcraft-engine   = { path = "clone/figcraft/crates/engine" }
+figcraft-color    = { path = "clone/figcraft/crates/color" }
 
 # ── The new native DocCraft crafts ──────────────────────────────────────────
 doccraft-theme    = { path = "crates/theme" }
