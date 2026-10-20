@@ -1790,7 +1790,7 @@ dependencies = [
 
 [[package]]
 name = "doccraft"
-version = "3.3.0"
+version = "3.4.0"
 dependencies = [
  "craft-ui",
  "deckcraft-engine",
@@ -1814,9 +1814,10 @@ dependencies = [
 
 [[package]]
 name = "doccraft-drawio"
-version = "3.3.0"
+version = "3.4.0"
 dependencies = [
  "craft-ui",
+ "doccraft-theme",
  "eframe",
  "egui",
  "roxmltree 0.19.0",
@@ -1826,25 +1827,38 @@ dependencies = [
 
 [[package]]
 name = "doccraft-md"
-version = "3.3.0"
+version = "3.4.0"
 dependencies = [
  "craft-ui",
+ "doccraft-theme",
  "egui",
  "serde_json",
 ]
 
 [[package]]
 name = "doccraft-notes"
-version = "3.3.0"
+version = "3.4.0"
+dependencies = [
+ "craft-ui",
+ "doccraft-theme",
+ "egui",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "doccraft-theme"
+version = "3.4.0"
 dependencies = [
  "egui",
 ]
 
 [[package]]
 name = "doccraft-typeset"
-version = "3.3.0"
+version = "3.4.0"
 dependencies = [
  "craft-ui",
+ "doccraft-theme",
  "egui",
  "serde_json",
 ]

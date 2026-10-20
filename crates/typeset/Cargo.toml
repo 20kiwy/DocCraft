@@ -6,5 +6,6 @@ description = "Native typesetting craft for DocCraft: markup source, page layout
 
 [dependencies]
 egui.workspace = true
+doccraft-theme.workspace = true
 serde_json.workspace = true
 craft-ui.workspace = true

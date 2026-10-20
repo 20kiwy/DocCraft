@@ -6,6 +6,7 @@ description = "Native drawio craft for DocCraft: mxGraph model, .drawio XML pars
 
 [dependencies]
 egui.workspace = true
+doccraft-theme.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 roxmltree.workspace = true
